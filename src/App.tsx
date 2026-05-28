@@ -54,8 +54,8 @@ const AppRoutes = () => {
 
 const App = () => (
   <TooltipProvider>
+    <ErrorDebugPopup />
     <ClonedAuthProvider>
-      <ErrorDebugPopup />
       <Toaster />
       <Sonner />
       <AppRoutes />
