@@ -76,6 +76,27 @@ const saveState = (id, data) => {
   try { localStorage.setItem(storageKey(id), JSON.stringify(data)); } catch {}
 };
 
+const getActivePublishUser = async (contextUser) => {
+  if (contextUser?.id) return contextUser;
+
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.user) return session.user;
+
+  const { data: { session: refreshedSession } } = await supabase.auth.refreshSession();
+  if (refreshedSession?.user) return refreshedSession.user;
+
+  const { data: { user: authUser } } = await supabase.auth.getUser();
+  return authUser || null;
+};
+
+const getPublishSessionUser = async () => {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (session?.user) return session.user;
+
+  const { data: { session: refreshedSession } } = await supabase.auth.refreshSession();
+  return refreshedSession?.user || null;
+};
+
 // Jataí-style PostCard rendering PertoDeMimServicos posts
 const PostCard = ({ post, onChat }) => {
   const initial = loadState(post.id);
@@ -455,18 +476,15 @@ export default function FeedPage() {
   };
 
   const openModal = async (mode) => {
-    if (user) {
-      resetCreateModal(mode);
-      return;
-    }
-    // Fallback: AuthContext may not be wired; verify session directly with Supabase.
     try {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (authUser) {
+      const activeUser = await getActivePublishUser(user);
+      if (activeUser) {
         resetCreateModal(mode);
         return;
       }
-    } catch (_) {}
+    } catch (error) {
+      console.warn('publish auth check failed', error);
+    }
     requireLoginForPublish(mode);
   };
 
@@ -474,12 +492,11 @@ export default function FeedPage() {
     if (searchParams.get('action') !== 'publish') return;
     let cancelled = false;
     (async () => {
-      let isAuthed = Boolean(user);
-      if (!isAuthed) {
-        try {
-          const { data: { user: authUser } } = await supabase.auth.getUser();
-          isAuthed = Boolean(authUser);
-        } catch (_) {}
+      let isAuthed = false;
+      try {
+        isAuthed = Boolean(await getActivePublishUser(user));
+      } catch (error) {
+        console.warn('publish auto-open auth check failed', error);
       }
       if (cancelled || !isAuthed) return;
       const mode = searchParams.get('mode') === 'offer' ? 'offer' : 'need';
@@ -613,9 +630,8 @@ export default function FeedPage() {
     }
     setLoadingPost(true);
     try {
-      // Require a validated auth user so post is visible to everyone
-      const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
-      if (authError || !authUser) {
+      const authUser = await getPublishSessionUser();
+      if (!authUser) {
         requireLoginForPublish(modalMode);
         return;
       }
