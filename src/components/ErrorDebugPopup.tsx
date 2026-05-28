@@ -116,6 +116,9 @@ export const ErrorDebugPopup: React.FC = () => {
   const [minimized, setMinimized] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const docInputRef = useRef<HTMLInputElement | null>(null);
+  const currentUserIdRef = useRef<string | null>(null);
+  const lastAdminUserIdRef = useRef<string | null>(null);
+  const accessCheckIdRef = useRef(0);
 
   // Drag state
   const [pos, setPos] = useState<{ x: number; y: number }>(() => ({
@@ -132,30 +135,54 @@ export const ErrorDebugPopup: React.FC = () => {
     let active = true;
 
     const checkAdmin = async (userId: string | undefined) => {
+      const checkId = ++accessCheckIdRef.current;
+
       if (!active) return;
 
       if (!userId) {
+        currentUserIdRef.current = null;
+        lastAdminUserIdRef.current = null;
         setHasSession(false);
         setIsAdmin(false);
         setIsCheckingAccess(false);
         return;
       }
 
+      currentUserIdRef.current = userId;
       setHasSession(true);
-      setIsCheckingAccess(true);
+
+      const cachedAdminUserId = sessionStorage.getItem("debug-tool-admin-user-id");
+      const alreadyTrusted = lastAdminUserIdRef.current === userId || cachedAdminUserId === userId;
+      if (alreadyTrusted) {
+        lastAdminUserIdRef.current = userId;
+        setIsAdmin(true);
+        setIsCheckingAccess(false);
+      } else {
+        setIsCheckingAccess(true);
+      }
 
       const { data, error } = await supabase.rpc("has_role", {
         _user_id: userId,
         _role: "admin",
       });
 
-      if (!active) return;
+      if (!active || checkId !== accessCheckIdRef.current) return;
 
-      setIsAdmin(!error && data === true);
+      if (!error && data === true) {
+        lastAdminUserIdRef.current = userId;
+        sessionStorage.setItem("debug-tool-admin-user-id", userId);
+        setIsAdmin(true);
+      } else if (!error) {
+        lastAdminUserIdRef.current = null;
+        sessionStorage.removeItem("debug-tool-admin-user-id");
+        setIsAdmin(false);
+      }
       setIsCheckingAccess(false);
     };
 
     const { data: authSubscription } = supabase.auth.onAuthStateChange((_event, session) => {
+      const nextUserId = session?.user?.id ?? null;
+      if (nextUserId && nextUserId === currentUserIdRef.current) return;
       checkAdmin(session?.user?.id);
     });
 
