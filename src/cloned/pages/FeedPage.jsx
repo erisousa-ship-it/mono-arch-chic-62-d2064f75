@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AuthContext } from '../ClonedAuthContext';
 import { Card } from '../components/ui/card';
@@ -317,6 +317,7 @@ const PostCard = ({ post, onChat }) => {
 export default function FeedPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user, token } = useContext(AuthContext);
 
   const [posts, setPosts] = useState([]);
