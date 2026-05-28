@@ -160,6 +160,7 @@ const uploadLargeFile = async (
  * do erro. Nada é enviado por chat/mutation — apenas evento de janela.
  */
 export const ErrorDebugPopup: React.FC = () => {
+  const { token } = useContext(ClonedAuthContext) as { token?: string | null };
   const [text, setText] = useState("");
   const [files, setFiles] = useState<AttachedFile[]>([]);
   const [attachError, setAttachError] = useState<string | null>(null);
@@ -307,17 +308,26 @@ export const ErrorDebugPopup: React.FC = () => {
       setUploadProgress("Preparando upload...");
       const uploadedUrls: { name: string; url: string; type: string }[] = [];
       try {
+        const accessToken = await resolveUploadAccessToken(token);
         for (let i = 0; i < files.length; i++) {
           const f = files[i];
           const ext = sanitizePathSegment(f.name.split(".").pop() || "bin");
           const baseName = sanitizePathSegment(f.name.replace(/\.[^/.]+$/, ""));
           const path = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}-${baseName}.${ext}`;
           setUploadProgress(`Enviando ${i + 1}/${files.length}: 0%`);
-          await uploadLargeFile(f.file, path, (percent) => {
-            setUploadProgress(`Enviando ${i + 1}/${files.length}: ${percent}%`);
-          });
-          const { data: pub } = supabase.storage.from("debug-uploads").getPublicUrl(path);
-          uploadedUrls.push({ name: f.name, url: pub.publicUrl, type: f.type });
+          if (accessToken) {
+            await uploadLargeFile(f.file, path, accessToken, (percent) => {
+              setUploadProgress(`Enviando ${i + 1}/${files.length}: ${percent}%`);
+            });
+            const url = await createDebugFileUrl(path, accessToken);
+            uploadedUrls.push({ name: f.name, url, type: f.type });
+          } else if (f.file.size <= INLINE_FALLBACK_LIMIT) {
+            setUploadProgress(`Anexando ${i + 1}/${files.length} sem sessão...`);
+            const url = await readFileAsDataUrl(f.file);
+            uploadedUrls.push({ name: f.name, url, type: f.type });
+          } else {
+            throw new Error("Sessão indisponível para arquivos grandes. Use um arquivo menor ou faça login novamente.");
+          }
         }
       } catch (e) {
         setAttachError(`Erro inesperado no upload: ${(e as Error).message}`);
@@ -336,7 +346,7 @@ export const ErrorDebugPopup: React.FC = () => {
     }
 
     window.dispatchEvent(new CustomEvent("lovable-debug-error", { detail: message }));
-  }, [text, files]);
+  }, [text, files, token]);
 
   const onTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
