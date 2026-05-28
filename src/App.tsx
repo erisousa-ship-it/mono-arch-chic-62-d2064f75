@@ -1,44 +1,66 @@
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { useContext } from "react";
+import { Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
-import Work from "./pages/Work";
-import Services from "./pages/Services";
-import About from "./pages/About";
-import Contact from "./pages/Contact";
-import Blog from "./pages/Blog";
-import BlogPost from "./pages/BlogPost";
+import Discover from "./pages/Discover";
+import Auth from "./pages/Auth";
+import Admin from "./pages/Admin";
+import MyEvents from "./pages/MyEvents";
+import CreateEvent from "./pages/CreateEvent";
+import EditEvent from "./pages/EditEvent";
+import Social from "./pages/Social";
 import NotFound from "./pages/NotFound";
-import DebugErrorThrower from "./components/DebugErrorThrower";
-import ErrorDebugPopup from "./components/ErrorDebugPopup";
+import ServicosLanding from "./pages/servicos/Landing";
+import ServicosAuth from "./pages/servicos/Auth";
+import ServicosFeed from "./pages/servicos/Feed";
+import ServicosChat from "./pages/servicos/Chat";
+import ServicosOfertantes from "./pages/servicos/Ofertantes";
+import ServicosAssinatura from "./pages/servicos/Assinatura";
+import ServicosPerfil from "./pages/servicos/Perfil";
+import ServicosAdmin from "./pages/servicos/Admin";
+import { ErrorDebugPopup } from "./components/ErrorDebugPopup";
+import { ClonedAuthProvider, clonedRoutes } from "./cloned/ClonedRoutes";
+import { AuthContext as ClonedAuthContext } from "./cloned/ClonedAuthContext";
 
-const queryClient = new QueryClient();
+const AppRoutes = () => {
+  const { user } = useContext(ClonedAuthContext) as { user: { role?: string } | null };
+
+  return (
+    <Routes>
+      {clonedRoutes(user)}
+      <Route path="/discover" element={<Discover />} />
+      <Route path="/event/:id" element={<Index />} />
+      <Route path="/event/:id/edit" element={<EditEvent />} />
+      <Route path="/my-events" element={<MyEvents />} />
+      <Route path="/create-event" element={<CreateEvent />} />
+      <Route path="/social" element={<Social />} />
+      {/* Rotas antigas mantidas em fallback para não quebrar links já existentes. */}
+      <Route path="/legacy/auth" element={<Auth />} />
+      <Route path="/legacy/admin" element={<Admin />} />
+      <Route path="/legacy/servicos" element={<ServicosLanding />} />
+      <Route path="/legacy/servicos/auth" element={<ServicosAuth />} />
+      <Route path="/legacy/servicos/home" element={<ServicosFeed />} />
+      <Route path="/legacy/servicos/chat" element={<ServicosChat />} />
+      <Route path="/legacy/servicos/ofertantes" element={<ServicosOfertantes />} />
+      <Route path="/legacy/servicos/assinatura" element={<ServicosAssinatura />} />
+      <Route path="/legacy/servicos/perfil" element={<ServicosPerfil />} />
+      <Route path="/legacy/servicos/admin" element={<ServicosAdmin />} />
+      <Route path="*" element={<NotFound />} />
+    </Routes>
+  );
+};
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    {/* Fora de qualquer ErrorBoundary: erro precisa escapar ao overlay global */}
-    <DebugErrorThrower />
-    <ErrorDebugPopup />
-    <TooltipProvider>
+  <TooltipProvider>
+    <ClonedAuthProvider>
+      <ErrorDebugPopup />
       <Toaster />
       <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/work" element={<Work />} />
-          <Route path="/services" element={<Services />} />
-          <Route path="/about" element={<About />} />
-          <Route path="/contact" element={<Contact />} />
-          <Route path="/blog" element={<Blog />} />
-          <Route path="/blog/:id" element={<BlogPost />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
-  </QueryClientProvider>
+      <AppRoutes />
+    </ClonedAuthProvider>
+  </TooltipProvider>
 );
 
 export default App;

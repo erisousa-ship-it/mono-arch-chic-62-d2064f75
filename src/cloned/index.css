@@ -1,0 +1,165 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;700&family=DM+Sans:wght@400;500;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background: #FAFAFA;
+}
+
+/* Garantir que texto não ultrapasse os containers */
+* {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+}
+
+/* Quebrar URLs longas corretamente */
+a, p, span, div {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+
+/* Forçar quebra de URLs em todos os lugares */
+.break-all-urls a {
+    word-break: break-all;
+}
+
+/* Garantir max-width em containers de texto */
+.text-overflow-fix {
+    word-break: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
+}
+
+/* Card de posts - forçar quebra de texto */
+[data-testid="post-card"] p,
+[data-testid="post-card"] span,
+[data-testid="post-card"] a {
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    max-width: 100%;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", system-ui, sans-serif;
+    letter-spacing: -0.02em;
+    font-weight: 700;
+}
+
+code {
+    font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New', monospace;
+}
+
+/* Esconder scrollbar mas manter scroll funcional */
+.scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+    display: none;
+}
+
+/* Custom Scrollbar Styles */
+.scroll-container::-webkit-scrollbar {
+    width: 10px;
+    display: block !important;
+}
+
+.scroll-container::-webkit-scrollbar-track {
+    background: #e5e7eb;
+    border-radius: 10px;
+}
+
+.scroll-container::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #1CA9C9 0%, #178ea8 100%);
+    border-radius: 10px;
+    border: 2px solid #e5e7eb;
+}
+
+.scroll-container::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #178ea8 0%, #126d82 100%);
+}
+
+/* Firefox */
+.scroll-container {
+    scrollbar-width: thin;
+    scrollbar-color: #1CA9C9 #e5e7eb;
+}
+
+/* Garantir scroll em modais/dialogs */
+[role="dialog"] [data-radix-scroll-area-viewport],
+[role="dialog"] .overflow-y-auto,
+[role="dialog"] .overflow-auto {
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+}
+
+/* Garantir que o conteúdo do modal seja scrollável */
+[data-testid="create-post-dialog"] > div:nth-child(2) {
+    overflow-y: auto !important;
+    max-height: calc(90vh - 220px);
+}
+
+@layer base {
+    :root {
+        --background: 0 0% 100%;
+        --foreground: 210 17% 13%;
+        --card: 0 0% 100%;
+        --card-foreground: 210 17% 13%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 210 17% 13%;
+        --primary: 142 71% 45%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 25 95% 53%;
+        --secondary-foreground: 0 0% 100%;
+        --muted: 0 0% 96.1%;
+        --muted-foreground: 207 16% 39%;
+        --accent: 142 71% 45%;
+        --accent-foreground: 0 0% 100%;
+        --destructive: 0 84.2% 60.2%;
+        --destructive-foreground: 0 0% 98%;
+        --border: 0 0% 89.8%;
+        --input: 0 0% 89.8%;
+        --ring: 142 71% 45%;
+        --radius: 1rem;
+    }
+}
+
+@layer base {
+    [data-debug-wrapper="true"] {
+        display: contents !important;
+    }
+
+    [data-debug-wrapper="true"] > * {
+        margin-left: inherit;
+        margin-right: inherit;
+        margin-top: inherit;
+        margin-bottom: inherit;
+        padding-left: inherit;
+        padding-right: inherit;
+        padding-top: inherit;
+        padding-bottom: inherit;
+        column-gap: inherit;
+        row-gap: inherit;
+        gap: inherit;
+        border-left-width: inherit;
+        border-right-width: inherit;
+        border-top-width: inherit;
+        border-bottom-width: inherit;
+        border-left-style: inherit;
+        border-right-style: inherit;
+        border-top-style: inherit;
+        border-bottom-style: inherit;
+        border-left-color: inherit;
+        border-right-color: inherit;
+        border-top-color: inherit;
+        border-bottom-color: inherit;
+    }
+}
