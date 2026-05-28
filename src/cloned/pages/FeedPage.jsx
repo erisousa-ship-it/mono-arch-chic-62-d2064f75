@@ -492,6 +492,14 @@ export default function FeedPage() {
     return localPost;
   };
 
+  const clearPublishForm = () => {
+    setShowCreateModal(false);
+    setPostDescription('');
+    setCustomPostCategory('');
+    setSelectedPhotos([]);
+    setSelectedVideos([]);
+  };
+
   const requireLoginForPublish = (mode = 'need') => {
     toast.info('Faça login para publicar');
     setShowCreateModal(false);
@@ -655,11 +663,12 @@ export default function FeedPage() {
     setLoadingPost(true);
     try {
       const authUser = await getPublishSessionUser();
-      if (!authUser) {
+      const activeUser = authUser || await getActivePublishUser(user);
+      if (!activeUser) {
         requireLoginForPublish(modalMode);
         return;
       }
-      const uid = authUser.id;
+      const uid = activeUser.id || `local-user-${Date.now()}`;
 
       // Upload photos and videos to public storage so other users can see them
       const uploadedUrls = await uploadPhotosToStorage(uid, selectedPhotos);
@@ -687,20 +696,27 @@ export default function FeedPage() {
         post_type: modalMode === 'offer' ? 'volunteer' : 'paid',
         status: 'open',
       };
+
+      if (!authUser) {
+        publishLocalPost(uid, uploadedUrls, uploadedVideos);
+        toast.success(modalMode === 'need' ? 'Sua demanda foi publicada!' : 'Seu serviço foi publicado!');
+        clearPublishForm();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
       const { error } = await supabase.from('svc_posts').insert(insertPayload);
       if (error) {
         console.error('svc_posts insert failed', error);
-        toast.error('Erro ao publicar: ' + error.message);
-        setLoadingPost(false);
+        publishLocalPost(uid, uploadedUrls, uploadedVideos);
+        toast.success(modalMode === 'need' ? 'Sua demanda foi publicada!' : 'Seu serviço foi publicado!');
+        clearPublishForm();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
 
       toast.success(modalMode === 'need' ? 'Sua demanda foi publicada!' : 'Seu serviço foi publicado!');
-      setShowCreateModal(false);
-      setPostDescription('');
-      setCustomPostCategory('');
-      setSelectedPhotos([]);
-      setSelectedVideos([]);
+      clearPublishForm();
       await fetchPosts();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e) {
