@@ -30,6 +30,7 @@ const professionalAreas = [
 export default function AuthPage() {
   const [searchParams] = useSearchParams();
   const roleFromUrl = searchParams.get('role');
+  const nextPath = searchParams.get('next');
   
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
@@ -58,6 +59,11 @@ export default function AuthPage() {
   const { login } = useContext(AuthContext);
   const navigate = useNavigate();
   const { t } = useTranslation();
+
+  const getPostAuthPath = () => {
+    if (nextPath?.startsWith('/') && !nextPath.startsWith('//')) return nextPath;
+    return '/home';
+  };
 
   const toggleCategory = (category) => {
     setSelectedCategories(prev => 
@@ -183,7 +189,7 @@ export default function AuthPage() {
         const profile = await getOrCreateSvcProfile(data.user);
         await login(data.session?.access_token, normalizeAuthUser(data.user, profile));
         toast.success('Login bem-sucedido!');
-        navigate('/home', { replace: true });
+        navigate(getPostAuthPath(), { replace: true });
       } else {
         const { data, error } = await supabase.auth.signUp({
           email,
@@ -204,7 +210,7 @@ export default function AuthPage() {
           });
           await login(data.session.access_token, normalizeAuthUser(data.user, profile));
           toast.success('Conta criada com sucesso!');
-          navigate('/home', { replace: true });
+          navigate(getPostAuthPath(), { replace: true });
         } else {
           toast.success('Verifique seu email para confirmar a conta');
           setIsLogin(true);
