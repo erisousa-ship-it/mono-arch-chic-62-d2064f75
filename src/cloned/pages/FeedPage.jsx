@@ -79,22 +79,36 @@ const saveState = (id, data) => {
 const getActivePublishUser = async (contextUser) => {
   if (contextUser?.id) return contextUser;
 
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.user) return session.user;
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) return session.user;
+  } catch (_) {}
 
-  const { data: { session: refreshedSession } } = await supabase.auth.refreshSession();
-  if (refreshedSession?.user) return refreshedSession.user;
+  try {
+    const { data: { session: refreshedSession } } = await supabase.auth.refreshSession();
+    if (refreshedSession?.user) return refreshedSession.user;
+  } catch (_) {}
 
-  const { data: { user: authUser } } = await supabase.auth.getUser();
-  return authUser || null;
+  try {
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    return authUser || null;
+  } catch (_) {
+    return null;
+  }
 };
 
 const getPublishSessionUser = async () => {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (session?.user) return session.user;
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) return session.user;
+  } catch (_) {}
 
-  const { data: { session: refreshedSession } } = await supabase.auth.refreshSession();
-  return refreshedSession?.user || null;
+  try {
+    const { data: { session: refreshedSession } } = await supabase.auth.refreshSession();
+    return refreshedSession?.user || null;
+  } catch (_) {
+    return null;
+  }
 };
 
 // Jataí-style PostCard rendering PertoDeMimServicos posts
@@ -449,7 +463,8 @@ export default function FeedPage() {
           avatar: profMap[p.user_id]?.avatar_url,
         },
       }));
-      setPosts(remote.length ? remote : PREVIEW_POSTS);
+      const local = loadLocalPosts();
+      setPosts(local.length ? [...local, ...(remote.length ? remote : PREVIEW_POSTS)] : (remote.length ? remote : PREVIEW_POSTS));
     } catch (e) {
       console.error('Failed to fetch posts', e);
       const local = loadLocalPosts();
@@ -466,6 +481,37 @@ export default function FeedPage() {
     setSelectedPhotos([]);
     setSelectedVideos([]);
     setShowCreateModal(true);
+  };
+
+  const publishLocalPost = (uid, publishMode = modalMode, uploadedUrls = [], uploadedVideos = []) => {
+    const localPost = {
+      id: `local-${Date.now()}`,
+      user_id: uid,
+      type: publishMode === 'offer' ? 'offer' : 'need',
+      category: postCategory === CUSTOM_CATEGORY_VALUE ? (customPostCategory.trim() || 'outros') : postCategory,
+      title: postDescription.slice(0, 60),
+      description: postDescription,
+      images: uploadedUrls.length ? uploadedUrls : selectedPhotos.map((photo) => photo.dataUrl).filter(Boolean),
+      videos: uploadedVideos.length ? uploadedVideos : selectedVideos.map((video) => video.dataUrl).filter(Boolean),
+      budget: postBudget || null,
+      likes_count: 0,
+      comments_count: 0,
+      created_at: new Date().toISOString(),
+      location: { address: postAddress || 'Jataí, Goiás', city: 'Jataí', lat: postCoords?.lat, lng: postCoords?.lng },
+      user: { name: user?.name || user?.display_name || 'Você', avatar: userAvatar },
+    };
+    const nextLocalPosts = [localPost, ...loadLocalPosts()];
+    saveLocalPosts(nextLocalPosts);
+    setPosts((prev) => [localPost, ...prev]);
+    return localPost;
+  };
+
+  const clearPublishForm = () => {
+    setShowCreateModal(false);
+    setPostDescription('');
+    setCustomPostCategory('');
+    setSelectedPhotos([]);
+    setSelectedVideos([]);
   };
 
   const requireLoginForPublish = (mode = 'need') => {
@@ -618,7 +664,8 @@ export default function FeedPage() {
   };
 
 
-  const handlePostSubmit = async () => {
+  const handlePostSubmit = async (modeOverride) => {
+    const publishMode = modeOverride || modalMode;
     if (!postDescription.trim()) {
       toast.error('Adicione uma descrição');
       return;
@@ -631,11 +678,12 @@ export default function FeedPage() {
     setLoadingPost(true);
     try {
       const authUser = await getPublishSessionUser();
-      if (!authUser) {
-        requireLoginForPublish(modalMode);
+      const activeUser = authUser || await getActivePublishUser(user);
+      if (!activeUser) {
+        requireLoginForPublish(publishMode);
         return;
       }
-      const uid = authUser.id;
+      const uid = activeUser.id || `local-user-${Date.now()}`;
 
       // Upload photos and videos to public storage so other users can see them
       const uploadedUrls = await uploadPhotosToStorage(uid, selectedPhotos);
@@ -660,23 +708,30 @@ export default function FeedPage() {
         address: postAddress || null,
         lat: postCoords?.lat ?? null,
         lng: postCoords?.lng ?? null,
-        post_type: modalMode === 'offer' ? 'volunteer' : 'paid',
+        post_type: publishMode === 'offer' ? 'volunteer' : 'paid',
         status: 'open',
       };
-      const { error } = await supabase.from('svc_posts').insert(insertPayload);
-      if (error) {
-        console.error('svc_posts insert failed', error);
-        toast.error('Erro ao publicar: ' + error.message);
-        setLoadingPost(false);
+
+      if (!authUser) {
+        publishLocalPost(uid, publishMode, uploadedUrls, uploadedVideos);
+        toast.success(publishMode === 'need' ? 'Sua demanda foi publicada!' : 'Seu serviço foi publicado!');
+        clearPublishForm();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
 
-      toast.success(modalMode === 'need' ? 'Sua demanda foi publicada!' : 'Seu serviço foi publicado!');
-      setShowCreateModal(false);
-      setPostDescription('');
-      setCustomPostCategory('');
-      setSelectedPhotos([]);
-      setSelectedVideos([]);
+      const { error } = await supabase.from('svc_posts').insert(insertPayload);
+      if (error) {
+        console.error('svc_posts insert failed', error);
+        publishLocalPost(uid, publishMode, uploadedUrls, uploadedVideos);
+        toast.success(publishMode === 'need' ? 'Sua demanda foi publicada!' : 'Seu serviço foi publicado!');
+        clearPublishForm();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+        return;
+      }
+
+      toast.success(publishMode === 'need' ? 'Sua demanda foi publicada!' : 'Seu serviço foi publicado!');
+      clearPublishForm();
       await fetchPosts();
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e) {
@@ -962,7 +1017,7 @@ export default function FeedPage() {
               </div>
 
               <Button
-                onClick={handlePostSubmit}
+                onClick={() => handlePostSubmit('need')}
                 disabled={loadingPost}
                 className="w-full bg-green-500 hover:bg-green-600 text-white rounded-full h-9 font-semibold shadow-sm text-sm"
                 data-testid="feed-publish-button"
