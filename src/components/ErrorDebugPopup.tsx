@@ -135,7 +135,7 @@ const ErrorDebugPopup = () => {
         if (a.truncated) message += ` [TRUNCADO em ${MAX_INLINE_BYTES} bytes]`;
         message += "\n";
         if (a.binary) {
-          message += `[binário base64 data URL, ${a.content.length} chars]\n${a.content.slice(0, 2000)}${a.content.length > 2000 ? "...[truncado]" : ""}\n`;
+          message += "[arquivo binário anexado por referência; conteúdo omitido para não travar o overlay global. Envie o arquivo real no chat/projeto para leitura.]\n";
         } else {
           message += "```\n" + a.content + "\n```\n";
         }
@@ -245,7 +245,7 @@ const ErrorDebugPopup = () => {
               {attachments.map((a, i) => (
                 <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "2px 4px", fontSize: 11 }}>
                   <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    📎 {a.name} <span style={{ opacity: 0.5 }}>({fmtSize(a.size)}){a.truncated ? " ✂" : ""}</span>
+                    📎 {a.name} <span style={{ opacity: 0.5 }}>({fmtSize(a.size)}){a.binary ? " binário" : a.truncated ? " ✂" : ""}</span>
                   </span>
                   <button
                     onClick={() => setAttachments((p) => p.filter((_, idx) => idx !== i))}
