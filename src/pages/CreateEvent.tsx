@@ -192,6 +192,7 @@ const CreateEvent = () => {
           background_image_url: publicUrl,
           target_date: targetDate.toISOString(),
           creator: creatorName,
+          created_by: user.id,
         });
 
       if (insertError) throw insertError;
