@@ -81,9 +81,6 @@ const uploadLargeFile = async (
  * do erro. Nada é enviado por chat/mutation — apenas evento de janela.
  */
 export const ErrorDebugPopup: React.FC = () => {
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isCheckingAccess, setIsCheckingAccess] = useState(true);
-  const [hasSession, setHasSession] = useState(false);
   const [text, setText] = useState("");
   const [files, setFiles] = useState<AttachedFile[]>([]);
   const [attachError, setAttachError] = useState<string | null>(null);
@@ -101,41 +98,6 @@ export const ErrorDebugPopup: React.FC = () => {
 
   const [size, setSize] = useState<{ w: number; h: number }>({ w: 380, h: 360 });
   const resizeRef = useRef<{ startX: number; startY: number; startW: number; startH: number } | null>(null);
-
-  useEffect(() => {
-    let active = true;
-
-    const checkAdmin = async (userId: string | undefined) => {
-      if (!active) return;
-      if (!userId) {
-        setHasSession(false);
-        setIsAdmin(false);
-        setIsCheckingAccess(false);
-        return;
-      }
-      setHasSession(true);
-      setIsCheckingAccess(true);
-      const { data, error } = await supabase.rpc("has_role", {
-        _user_id: userId,
-        _role: "admin",
-      });
-      if (!active) return;
-      setIsAdmin(!error && data === true);
-      setIsCheckingAccess(false);
-    };
-
-    const { data: authSubscription } = supabase.auth.onAuthStateChange((_event, session) => {
-      checkAdmin(session?.user?.id);
-    });
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      checkAdmin(session?.user?.id);
-    });
-
-    return () => {
-      active = false;
-      authSubscription.subscription.unsubscribe();
-    };
-  }, []);
 
   const onHeaderMouseDown = (e: React.MouseEvent) => {
     dragRef.current = { dx: e.clientX - pos.x, dy: e.clientY - pos.y };
@@ -312,57 +274,6 @@ export const ErrorDebugPopup: React.FC = () => {
     height: minimized ? "auto" : size.h,
     zIndex: 2147483600,
   };
-
-  if (isCheckingAccess) {
-    return (
-      <div
-        style={{ ...panelStyle, width: 260, height: "auto" }}
-        className="bg-background border border-border rounded-md shadow-2xl px-3 py-2"
-      >
-        <p className="text-xs text-muted-foreground">Verificando acesso do Debug Tool...</p>
-      </div>
-    );
-  }
-
-  if (!hasSession) {
-    return (
-      <div
-        style={{ ...panelStyle, width: 300, height: "auto" }}
-        className="bg-background border border-border rounded-md shadow-2xl p-3 space-y-3"
-        role="dialog"
-        aria-label="Acesso ao Debug Tool"
-      >
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-wider text-foreground">Debug Tool</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Entre ou crie a primeira conta em <span className="text-foreground">/auth</span> para receber acesso admin.
-          </p>
-        </div>
-        <a
-          href="/auth"
-          className="inline-flex items-center justify-center rounded-md bg-primary px-3 py-2 text-xs font-medium text-primary-foreground"
-        >
-          Ir para login
-        </a>
-      </div>
-    );
-  }
-
-  if (!isAdmin) {
-    return (
-      <div
-        style={{ ...panelStyle, width: 320, height: "auto" }}
-        className="bg-background border border-border rounded-md shadow-2xl p-3 space-y-2"
-        role="status"
-        aria-label="Aguardando acesso admin"
-      >
-        <p className="text-xs font-semibold uppercase tracking-wider text-foreground">Debug Tool</p>
-        <p className="text-xs text-muted-foreground">
-          Sua sessão foi carregada, mas esta conta ainda não tem role <span className="text-foreground">admin</span>.
-        </p>
-      </div>
-    );
-  }
 
   const totalKb = Math.round(files.reduce((a, f) => a + f.size, 0) / 1024);
 
