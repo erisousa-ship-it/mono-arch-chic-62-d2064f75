@@ -1,22 +1,4 @@
-import { useEffect, useState } from "react";
-
-export const DebugErrorThrower = () => {
-  const [message, setMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<string>).detail;
-      if (typeof detail === "string" && detail.length > 0) {
-        setMessage(detail);
-      }
-    };
-    window.addEventListener("lovable-debug-error", handler as EventListener);
-    return () => window.removeEventListener("lovable-debug-error", handler as EventListener);
-  }, []);
-
-  if (message) {
-    throw new Error(message);
-  }
-
-  return null;
-};
+// Disabled: this component previously threw arbitrary errors from a window
+// event, which caused blank screens and surfaced attacker-controlled text as
+// "runtime errors". Kept as a no-op to preserve imports.
+export const DebugErrorThrower = () => null;
