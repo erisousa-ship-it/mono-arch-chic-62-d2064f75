@@ -588,7 +588,12 @@ export default function FeedPage() {
       reader.onloadend = () => {
         setSelectedPhotos((prev) => [
           ...prev,
-          { id: `${Date.now()}-${Math.random().toString(36).slice(2)}`, dataUrl: reader.result },
+          {
+            id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
+            file,
+            dataUrl: reader.result,
+            previewUrl: URL.createObjectURL(file),
+          },
         ]);
       };
       reader.readAsDataURL(file);
@@ -616,6 +621,7 @@ export default function FeedPage() {
           id: `${Date.now()}-${Math.random().toString(36).slice(2)}`,
           file,
           dataUrl: URL.createObjectURL(file),
+          previewUrl: URL.createObjectURL(file),
         },
       ]);
       toast.success('Vídeo adicionado!');
@@ -623,8 +629,17 @@ export default function FeedPage() {
     e.target.value = '';
   };
 
-  const removePhoto = (id) => setSelectedPhotos((prev) => prev.filter((p) => p.id !== id));
-  const removeVideo = (id) => setSelectedVideos((prev) => prev.filter((v) => v.id !== id));
+  const removePhoto = (id) => setSelectedPhotos((prev) => {
+    const target = prev.find((p) => p.id === id);
+    if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+    return prev.filter((p) => p.id !== id);
+  });
+  const removeVideo = (id) => setSelectedVideos((prev) => {
+    const target = prev.find((v) => v.id === id);
+    if (target?.previewUrl) URL.revokeObjectURL(target.previewUrl);
+    if (target?.dataUrl && target.dataUrl !== target.previewUrl) URL.revokeObjectURL(target.dataUrl);
+    return prev.filter((v) => v.id !== id);
+  });
 
   const dataUrlToBlob = (dataUrl) => {
     const [meta, b64] = dataUrl.split(',');
