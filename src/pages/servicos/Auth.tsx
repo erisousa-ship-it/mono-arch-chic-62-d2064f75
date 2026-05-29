@@ -34,7 +34,7 @@ export default function ServicosAuth() {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
       } else {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -43,7 +43,11 @@ export default function ServicosAuth() {
           },
         });
         if (error) throw error;
-        toast({ title: 'Conta criada', description: 'Verifique seu e-mail para confirmar.' });
+        if (!data.session) {
+          const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+          if (signInError) throw signInError;
+        }
+        toast({ title: 'Conta criada', description: 'Bem-vindo!' });
       }
     } catch (err: any) {
       toast({ title: 'Erro', description: err.message, variant: 'destructive' });
