@@ -165,6 +165,7 @@ export const ErrorDebugPopup: React.FC = () => {
   const [files, setFiles] = useState<AttachedFile[]>([]);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [minimized, setMinimized] = useState(false);
+  const [hidden, setHidden] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
@@ -208,6 +209,20 @@ export const ErrorDebugPopup: React.FC = () => {
       window.removeEventListener("mouseup", onUp);
     };
   }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "t" && e.key !== "T") return;
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      setHidden((h) => !h);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  if (hidden) return null;
 
   const onResizeMouseDown = (e: React.MouseEvent) => {
     resizeRef.current = { startX: e.clientX, startY: e.clientY, startW: size.w, startH: size.h };
