@@ -21,7 +21,7 @@ export const AuthSheet: React.FC<AuthSheetProps> = ({ isOpen, onClose }) => {
 
     try {
       if (isSignUp) {
-        const { error } = await supabase.auth.signUp({
+        const { data, error } = await supabase.auth.signUp({
           email,
           password,
           options: {
@@ -30,12 +30,17 @@ export const AuthSheet: React.FC<AuthSheetProps> = ({ isOpen, onClose }) => {
         });
         
         if (error) throw error;
-        
+
+        if (!data.session) {
+          const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+          if (signInError) throw signInError;
+        }
+
         toast({
           title: 'Conta criada!',
-          description: 'Agora você pode entrar com suas credenciais.'
+          description: 'Bem-vindo!'
         });
-        setIsSignUp(false);
+        onClose();
       } else {
         const { error } = await supabase.auth.signInWithPassword({
           email,
