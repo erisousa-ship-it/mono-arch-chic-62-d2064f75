@@ -202,37 +202,29 @@ export const fetchChatMessages = async (otherUserId, fallbackUserId = 'preview-u
 
 export const sendChatMessage = async (otherUserId, text, fallbackUserId = 'preview-user', extra = {}) => {
   const currentUserId = await getSessionUserId();
-  if (!otherUserId) throw new Error('Destinatário inválido');
-  if (!currentUserId || otherUserId.startsWith('preview-') || otherUserId.startsWith('local-')) {
-    return savePreviewMessage(otherUserId, text, fallbackUserId || currentUserId || 'preview-user', extra);
-  }
+  if (!currentUserId || otherUserId?.startsWith('preview-')) return savePreviewMessage(otherUserId, text, fallbackUserId, extra);
 
-  try {
-    const { data: conversationId, error: conversationError } = await supabase.rpc('svc_get_or_create_conversation', {
-      _other_user: otherUserId,
-    });
-    if (conversationError) throw conversationError;
+  const { data: conversationId, error: conversationError } = await supabase.rpc('svc_get_or_create_conversation', {
+    _other_user: otherUserId,
+  });
+  if (conversationError) throw conversationError;
 
-    const insertPayload = {
-      conversation_id: conversationId,
-      sender_id: currentUserId,
-      content: text || null,
-      media_type: extra.media_type || (extra.location ? 'location' : null),
-      media_url: Array.isArray(extra.media) ? extra.media[0] : extra.media_url || null,
-      lat: extra.location?.lat ?? extra.lat ?? null,
-      lng: extra.location?.lng ?? extra.lng ?? null,
-    };
+  const insertPayload = {
+    conversation_id: conversationId,
+    sender_id: currentUserId,
+    content: text || null,
+    media_type: extra.media_type || (extra.location ? 'location' : null),
+    media_url: Array.isArray(extra.media) ? extra.media[0] : extra.media_url || null,
+    lat: extra.location?.lat ?? extra.lat ?? null,
+    lng: extra.location?.lng ?? extra.lng ?? null,
+  };
 
-    const { data, error } = await supabase
-      .from('svc_messages')
-      .insert(insertPayload)
-      .select('*')
-      .single();
+  const { data, error } = await supabase
+    .from('svc_messages')
+    .insert(insertPayload)
+    .select('*')
+    .single();
 
-    if (error) throw error;
-    return normalizeMessage(data, currentUserId);
-  } catch (err) {
-    console.warn('[chatService] envio remoto falhou, salvando localmente:', err?.message || err);
-    return savePreviewMessage(otherUserId, text, currentUserId, extra);
-  }
+  if (error) throw error;
+  return normalizeMessage(data, currentUserId);
 };

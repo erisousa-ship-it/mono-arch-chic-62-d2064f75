@@ -350,34 +350,27 @@ export default function DirectChatPage() {
 
   const sendMessage = async (messageData = {}) => {
     if (!input.trim() && !messageData.location && !messageData.media) return;
-    if (!userId) { toast.error('Conversa inválida'); return; }
     setSending(true);
     const messageText = input || (messageData.location ? '📍 Localização compartilhada' : '📎 Mídia compartilhada');
-    const optimistic = {
-      id: `local-${Date.now()}`,
-      from_user_id: currentUser?.id || 'preview-user',
-      to_user_id: userId,
-      is_from_me: true,
-      message: messageText,
-      content: messageText,
-      created_at: new Date().toISOString(),
-      ...messageData,
-    };
-    setInput('');
-    setShowMediaOptions(false);
-    setMessages((prev) => [...prev, optimistic]);
     try {
+      const optimistic = {
+        id: `local-${Date.now()}`,
+        from_user_id: currentUser?.id || 'preview-user',
+        to_user_id: userId,
+        is_from_me: true,
+        message: messageText,
+        created_at: new Date().toISOString(),
+        ...messageData,
+      };
       const sent = await sendChatMessage(userId, messageText, currentUser?.id, messageData);
-      if (sent) {
-        setMessages((prev) => prev.map((m) => (m.id === optimistic.id ? sent : m)));
-      }
+      setInput('');
+      setShowMediaOptions(false);
+      setMessages((prev) => [...prev, sent || optimistic]);
       fetchMessages();
       fetchConversations();
     } catch (error) {
       console.error(error);
-      toast.error(error?.message || 'Não foi possível enviar a mensagem');
-      setMessages((prev) => prev.filter((m) => m.id !== optimistic.id));
-      setInput(messageText);
+      toast.error('Não foi possível enviar a mensagem');
     } finally { setSending(false); }
   };
 
