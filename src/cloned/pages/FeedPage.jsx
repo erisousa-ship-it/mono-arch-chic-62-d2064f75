@@ -108,14 +108,6 @@ const getPublishSessionUser = async () => {
     if (refreshedSession?.user) return refreshedSession.user;
   } catch (_) {}
 
-  // Fallback: sign in anonymously so the post can be persisted in svc_posts
-  try {
-    const { data, error } = await supabase.auth.signInAnonymously();
-    if (!error && data?.user) return data.user;
-    if (error) console.warn('signInAnonymously failed', error);
-  } catch (e) {
-    console.warn('signInAnonymously threw', e);
-  }
   return null;
 };
 
@@ -402,8 +394,17 @@ export default function FeedPage() {
   const [postBudget, setPostBudget] = useState('Sob orçamento');
   const [postCategory, setPostCategory] = useState('reformas');
   const [customPostCategory, setCustomPostCategory] = useState('');
-  const [selectedPhotos, setSelectedPhotos] = useState([]); // [{id, dataUrl}]
-  const [selectedVideos, setSelectedVideos] = useState([]); // [{id, dataUrl}]
+  const [selectedPhotos, setSelectedPhotos] = useState([]); // [{id, file, dataUrl, previewUrl}]
+  const [selectedVideos, setSelectedVideos] = useState([]); // [{id, file, dataUrl, previewUrl}]
+  const selectedPhotosRef = React.useRef([]);
+  const selectedVideosRef = React.useRef([]);
+
+  useEffect(() => { selectedPhotosRef.current = selectedPhotos; }, [selectedPhotos]);
+  useEffect(() => { selectedVideosRef.current = selectedVideos; }, [selectedVideos]);
+  useEffect(() => () => {
+    selectedPhotosRef.current.forEach((item) => item?.previewUrl && URL.revokeObjectURL(item.previewUrl));
+    selectedVideosRef.current.forEach((item) => item?.previewUrl && URL.revokeObjectURL(item.previewUrl));
+  }, []);
 
   useEffect(() => {
     fetchPosts();
