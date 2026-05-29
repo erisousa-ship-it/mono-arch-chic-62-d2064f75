@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
 
-const DEVELOPMENT_INSTRUCTION_PREFIX = "INSTRUÇÃO DE DESENVOLVIMENTO";
-
 export const DebugErrorThrower = () => {
   const [message, setMessage] = useState<string | null>(null);
 
@@ -15,11 +13,6 @@ export const DebugErrorThrower = () => {
     window.addEventListener("lovable-debug-error", handler as EventListener);
     return () => window.removeEventListener("lovable-debug-error", handler as EventListener);
   }, []);
-
-  if (message?.startsWith(DEVELOPMENT_INSTRUCTION_PREFIX)) {
-    console.info(message);
-    return null;
-  }
 
   if (message) {
     throw new Error(message);
