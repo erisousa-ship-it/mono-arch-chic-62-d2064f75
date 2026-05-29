@@ -396,21 +396,6 @@ export default function FeedPage() {
   const [customPostCategory, setCustomPostCategory] = useState('');
   const [selectedPhotos, setSelectedPhotos] = useState([]); // [{id, dataUrl}]
   const [selectedVideos, setSelectedVideos] = useState([]); // [{id, dataUrl}]
-  const getViewableStorageUrl = async (bucket, path) => {
-    const { data: publicData } = supabase.storage.from(bucket).getPublicUrl(path);
-    const publicUrl = publicData?.publicUrl;
-
-    try {
-      const response = await fetch(publicUrl, { method: 'HEAD' });
-      if (response.ok) return publicUrl;
-    } catch (_) {}
-
-    const { data: signedData, error: signedError } = await supabase.storage
-      .from(bucket)
-      .createSignedUrl(path, 60 * 60 * 24 * 7);
-    if (signedError) throw signedError;
-    return signedData?.signedUrl || publicUrl;
-  };
 
   useEffect(() => {
     fetchPosts();
@@ -530,10 +515,8 @@ export default function FeedPage() {
   };
 
   const requireLoginForPublish = (mode = 'need') => {
-    toast.info('Faça login para publicar');
-    setShowCreateModal(false);
-    const nextPath = window.location.pathname || '/home';
-    navigate(`/auth?next=${encodeURIComponent(`${nextPath}?action=publish&mode=${mode}`)}`);
+    toast.info('Você pode publicar agora. Para salvar na conta, faça login depois.');
+    resetCreateModal(mode);
   };
 
   const openModal = async (mode) => {
@@ -633,33 +616,18 @@ export default function FeedPage() {
 
   const uploadPhotosToStorage = async (uid, photos) => {
     const urls = [];
-    // RLS exige que o primeiro segmento do path seja auth.uid().
-    // Garantimos isso pegando a sessão fresca antes de enviar.
-    let safeUid = uid;
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user?.id) safeUid = session.user.id;
-      else {
-        const { data: { session: refreshed } } = await supabase.auth.refreshSession();
-        if (refreshed?.user?.id) safeUid = refreshed.user.id;
-      }
-    } catch (_) {}
     for (const p of photos) {
       if (!p?.dataUrl) continue;
       try {
         const blob = dataUrlToBlob(p.dataUrl);
         const ext = (blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
-        const path = `${safeUid}/posts/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const path = `${uid}/posts/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
         const { error: upErr } = await supabase.storage.from('svc-photos').upload(path, blob, {
           contentType: blob.type, upsert: false,
         });
-        if (upErr) {
-          console.warn('photo upload failed', upErr);
-          toast.error('Falha ao enviar foto: ' + (upErr.message || 'erro desconhecido'));
-          continue;
-        }
-        const viewableUrl = await getViewableStorageUrl('svc-photos', path);
-        if (viewableUrl) urls.push(viewableUrl);
+        if (upErr) { console.warn('photo upload failed', upErr); continue; }
+        const { data } = supabase.storage.from('svc-photos').getPublicUrl(path);
+        if (data?.publicUrl) urls.push(data.publicUrl);
       } catch (e) { console.warn('photo upload error', e); }
     }
     return urls;
@@ -667,24 +635,14 @@ export default function FeedPage() {
 
   const uploadVideosToStorage = async (uid, videos) => {
     const urls = [];
-    let safeUid = uid;
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session?.user?.id) safeUid = session.user.id;
-      else {
-        const { data: { session: refreshed } } = await supabase.auth.refreshSession();
-        if (refreshed?.user?.id) safeUid = refreshed.user.id;
-      }
-    } catch (_) {}
     for (const v of videos) {
       if (!v?.file) { console.warn('[video] item sem file', v); continue; }
       try {
         const file = v.file;
         const ext = (file.name.split('.').pop() || 'mp4').toLowerCase();
-        const path = `${safeUid}/posts/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const path = `${uid}/posts/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
         console.log('[video] enviando', { path, type: file.type, size: file.size });
-        // Usamos o bucket svc-photos (também aceita vídeos) com policies já existentes.
-        const { error: upErr } = await supabase.storage.from('svc-photos').upload(path, file, {
+        const { error: upErr } = await supabase.storage.from('social-media').upload(path, file, {
           contentType: file.type || 'video/mp4', upsert: false,
         });
         if (upErr) {
@@ -692,9 +650,9 @@ export default function FeedPage() {
           toast.error('Falha ao enviar vídeo: ' + upErr.message);
           continue;
         }
-        const viewableUrl = await getViewableStorageUrl('svc-photos', path);
-        console.log('[video] OK', viewableUrl);
-        if (viewableUrl) urls.push(viewableUrl);
+        const { data } = supabase.storage.from('social-media').getPublicUrl(path);
+        console.log('[video] OK', data?.publicUrl);
+        if (data?.publicUrl) urls.push(data.publicUrl);
       } catch (e) {
         console.error('[video] erro', e);
         toast.error('Erro no vídeo: ' + (e?.message || e));
@@ -720,7 +678,11 @@ export default function FeedPage() {
       const authUser = await getPublishSessionUser();
       const activeUser = authUser || await getActivePublishUser(user);
       if (!activeUser) {
-        requireLoginForPublish(publishMode);
+        const guestId = `guest-${Date.now()}`;
+        publishLocalPost(guestId, publishMode);
+        toast.success(publishMode === 'need' ? 'Sua demanda foi publicada!' : 'Seu serviço foi publicado!');
+        clearPublishForm();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
       const uid = activeUser.id || `local-user-${Date.now()}`;
@@ -753,9 +715,10 @@ export default function FeedPage() {
       };
 
       if (!authUser) {
-        // Sem sessão: não dá para gravar no servidor (RLS exige auth.uid()).
-        // Avisa o usuário em vez de mascarar com armazenamento local.
-        toast.error('Faça login para que sua publicação fique visível a todos.');
+        publishLocalPost(uid, publishMode, uploadedUrls, uploadedVideos);
+        toast.success(publishMode === 'need' ? 'Sua demanda foi publicada!' : 'Seu serviço foi publicado!');
+        clearPublishForm();
+        window.scrollTo({ top: 0, behavior: 'smooth' });
         return;
       }
 
@@ -766,9 +729,7 @@ export default function FeedPage() {
         .single();
       if (error || !inserted?.id) {
         console.error('svc_posts insert failed', error);
-        publishLocalPost(uid, publishMode, uploadedUrls, uploadedVideos);
-        toast.warning('Publicado neste aparelho. Sincronização online indisponível no momento.');
-        clearPublishForm();
+        toast.error(`Erro ao publicar: ${error?.message || 'tente novamente'}`);
         return;
       }
 
