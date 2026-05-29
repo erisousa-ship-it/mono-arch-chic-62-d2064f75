@@ -653,9 +653,9 @@ export default function FeedPage() {
   const uploadPhotosToStorage = async (uid, photos) => {
     const urls = [];
     for (const p of photos) {
-      if (!p?.dataUrl) continue;
+      if (!p?.file && !p?.dataUrl) continue;
       try {
-        const blob = dataUrlToBlob(p.dataUrl);
+        const blob = p.file || dataUrlToBlob(p.dataUrl);
         const ext = (blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
         const path = `${uid}/posts/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
         const { error: upErr } = await supabase.storage.from('svc-photos').upload(path, blob, {
@@ -678,7 +678,7 @@ export default function FeedPage() {
         const ext = (file.name.split('.').pop() || 'mp4').toLowerCase();
         const path = `${uid}/posts/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
         console.log('[video] enviando', { path, type: file.type, size: file.size });
-        const { error: upErr } = await supabase.storage.from('social-media').upload(path, file, {
+        const { error: upErr } = await supabase.storage.from('svc-photos').upload(path, file, {
           contentType: file.type || 'video/mp4', upsert: false,
         });
         if (upErr) {
@@ -686,7 +686,7 @@ export default function FeedPage() {
           toast.error('Falha ao enviar vídeo: ' + upErr.message);
           continue;
         }
-        const { data } = supabase.storage.from('social-media').getPublicUrl(path);
+        const { data } = supabase.storage.from('svc-photos').getPublicUrl(path);
         console.log('[video] OK', data?.publicUrl);
         if (data?.publicUrl) urls.push(data.publicUrl);
       } catch (e) {
