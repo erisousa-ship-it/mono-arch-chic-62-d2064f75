@@ -464,16 +464,7 @@ export default function FeedPage() {
         },
       }));
       const local = loadLocalPosts();
-      // Remote posts (svc_posts) are public to everyone. Only fall back to
-      // localStorage when there are no remote posts at all — local posts are
-      // visible only on the author's device and should not pollute the feed.
-      if (remote.length) {
-        setPosts(remote);
-      } else if (local.length) {
-        setPosts([...local, ...PREVIEW_POSTS]);
-      } else {
-        setPosts(PREVIEW_POSTS);
-      }
+      setPosts(local.length ? [...local, ...(remote.length ? remote : PREVIEW_POSTS)] : (remote.length ? remote : PREVIEW_POSTS));
     } catch (e) {
       console.error('Failed to fetch posts', e);
       const local = loadLocalPosts();
@@ -722,20 +713,20 @@ export default function FeedPage() {
       };
 
       if (!authUser) {
-        publishLocalPost(uid, publishMode, uploadedUrls, uploadedVideos);
-        toast.success(publishMode === 'need' ? 'Sua demanda foi publicada!' : 'Seu serviço foi publicado!');
-        clearPublishForm();
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        // Sem sessão: não dá para gravar no servidor (RLS exige auth.uid()).
+        // Avisa o usuário em vez de mascarar com armazenamento local.
+        toast.error('Faça login para que sua publicação fique visível a todos.');
         return;
       }
 
-      const { error } = await supabase.from('svc_posts').insert(insertPayload);
-      if (error) {
+      const { data: inserted, error } = await supabase
+        .from('svc_posts')
+        .insert(insertPayload)
+        .select('id')
+        .single();
+      if (error || !inserted?.id) {
         console.error('svc_posts insert failed', error);
-        publishLocalPost(uid, publishMode, uploadedUrls, uploadedVideos);
-        toast.success(publishMode === 'need' ? 'Sua demanda foi publicada!' : 'Seu serviço foi publicado!');
-        clearPublishForm();
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        toast.error(`Erro ao publicar: ${error?.message || 'tente novamente'}`);
         return;
       }
 
