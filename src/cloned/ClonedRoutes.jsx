@@ -24,6 +24,8 @@ import HousingPage from './pages/HousingPage';
 import SubscriptionPage from './pages/SubscriptionPage';
 import PublicProfilePage from './pages/PublicProfilePage';
 import CallPage from './pages/CallPage';
+import OferecoAjudaPage from './pages/OferecoAjudaPage';
+import SouVoluntarioPage from './pages/SouVoluntarioPage';
 import { AuthContext } from './ClonedAuthContext';
 import { supabase } from '@/integrations/supabase/client';
 import { getOrCreateSvcProfile, normalizeAuthUser } from './lib/authProfile';
@@ -165,5 +167,7 @@ export function clonedRoutes(user) {
     <Route key="cloned-oferecer" path="/oferecer-servicos" element={<OfferServicesPage />} />,
     <Route key="cloned-assinatura" path="/assinatura" element={<SubscriptionPage />} />,
     <Route key="cloned-servicos-assinatura" path="/servicos/assinatura" element={<SubscriptionPage />} />,
+    <Route key="cloned-ofereco-ajuda" path="/ofereco-ajuda" element={<OferecoAjudaPage />} />,
+    <Route key="cloned-sou-voluntario" path="/sou-voluntario" element={<SouVoluntarioPage />} />,
   ];
 }

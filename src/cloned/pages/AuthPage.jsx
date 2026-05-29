@@ -396,7 +396,7 @@ export default function AuthPage() {
                       }`}
                     >
                       <User size={24} />
-                      <span>{t('needHelp')}</span>
+                      <span>Procuro serviço</span>
                     </button>
                     <button
                       type="button"
@@ -409,7 +409,7 @@ export default function AuthPage() {
                       }`}
                     >
                       <Heart size={24} />
-                      <span>{t('wantToHelp')}</span>
+                      <span>Ofereço serviço</span>
                     </button>
                   </div>
                 </div>
