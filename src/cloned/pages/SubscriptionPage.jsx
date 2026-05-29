@@ -106,9 +106,13 @@ export default function SubscriptionPage() {
   const [pixData, setPixData] = useState(null);
   const [loadingPix, setLoadingPix] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [customPix, setCustomPix] = useState('');
+  const [savedPix, setSavedPix] = useState('');
+  const [savingPix, setSavingPix] = useState(false);
 
   useEffect(() => {
     fetchStatus();
+    loadCustomPix();
   }, []);
 
   const fetchStatus = async () => {
@@ -131,6 +135,41 @@ export default function SubscriptionPage() {
     } catch (e) { console.error(e); }
   };
 
+  const loadCustomPix = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+      const { data } = await supabase
+        .from('svc_profiles')
+        .select('pix_brcode')
+        .eq('user_id', session.user.id)
+        .maybeSingle();
+      if (data?.pix_brcode) {
+        setCustomPix(data.pix_brcode);
+        setSavedPix(data.pix_brcode);
+      }
+    } catch (e) { console.error(e); }
+  };
+
+  const saveCustomPix = async () => {
+    setSavingPix(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { toast.error('Faça login primeiro'); return; }
+      const value = customPix.trim() || null;
+      const { error } = await supabase
+        .from('svc_profiles')
+        .update({ pix_brcode: value })
+        .eq('user_id', session.user.id);
+      if (error) throw error;
+      setSavedPix(value || '');
+      toast.success(value ? 'Sua chave PIX foi salva!' : 'Chave PIX removida.');
+    } catch (e) {
+      console.error(e);
+      toast.error('Erro ao salvar chave PIX');
+    } finally { setSavingPix(false); }
+  };
+
   // ---- BR Code PIX fixo (estático) ----
   const FIXED_BRCODE =
     '00020126580014BR.GOV.BCB.PIX01363ef11200-bebf-4d88-930c-48e84b11cfc4520400005303986540535.905802BR592551.965.652 ERI JONHSON DE6009SAO PAULO610805409000622505219uC1rHtH0iT8qxs19tl986304B464';
@@ -143,7 +182,7 @@ export default function SubscriptionPage() {
 
       const amount = 35.9;
       const txid = `JRT${Date.now().toString(36).toUpperCase()}`.slice(0, 25);
-      const brcode = FIXED_BRCODE;
+      const brcode = (savedPix && savedPix.trim()) || FIXED_BRCODE;
 
       const trialEnds = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
       const expires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
