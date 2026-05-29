@@ -2,6 +2,7 @@ import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Search, Wrench, MapPin, Star } from 'lucide-react';
 import { SEOHead } from '@/components/SEOHead';
+import CountryMonuments from '@/components/CountryMonuments';
 
 export default function ServicosLanding() {
   const navigate = useNavigate();
@@ -68,6 +69,8 @@ export default function ServicosLanding() {
           </div>
         </div>
       </section>
+
+      <CountryMonuments />
 
       <div className="bg-green-500 py-8">
         <div className="max-w-7xl mx-auto px-4 flex flex-col md:flex-row items-center justify-between">
