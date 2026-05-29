@@ -212,9 +212,18 @@ export default function AuthPage() {
           toast.success('Conta criada com sucesso!');
           navigate(getPostAuthPath(), { replace: true });
         } else {
-          toast.success('Verifique seu email para confirmar a conta');
-          setIsLogin(true);
-          setStep(1);
+          // Auto-confirm: faz login imediato para evitar verificação por e-mail
+          const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+          if (signInError) throw signInError;
+          const profile = await getOrCreateSvcProfile(signInData.user, {
+            display_name: name,
+            role,
+            city: locationAddress,
+            categories: categoriesForProfile,
+          });
+          await login(signInData.session?.access_token, normalizeAuthUser(signInData.user, profile));
+          toast.success('Conta criada com sucesso!');
+          navigate(getPostAuthPath(), { replace: true });
         }
       }
     } catch (error) {
