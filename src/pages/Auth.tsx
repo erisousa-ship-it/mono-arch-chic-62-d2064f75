@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { SEOHead } from '@/components/SEOHead';
+import { translateAuthError } from '@/lib/authErrors';
 
 const Auth = () => {
   const [email, setEmail] = useState('');
@@ -73,7 +74,7 @@ const Auth = () => {
     } catch (error: any) {
       toast({
         title: 'Erro',
-        description: error.message,
+        description: translateAuthError(error?.message),
         variant: 'destructive',
       });
     } finally {

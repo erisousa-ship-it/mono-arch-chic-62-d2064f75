@@ -155,8 +155,8 @@ export default function AuthModal({ open, onClose, mode = 'login', onModeChange 
 
   const handleSignup = async (e) => {
     e.preventDefault();
-    if (password.length < 6) {
-      toast.error('Senha deve ter no mínimo 6 caracteres');
+    if (password.length < 1) {
+      toast.error('Digite uma senha');
       return;
     }
     setLoading(true);
