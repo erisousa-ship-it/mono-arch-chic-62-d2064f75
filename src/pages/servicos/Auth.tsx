@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { SEOHead } from '@/components/SEOHead';
+import { translateAuthError } from '@/lib/authErrors';
 
 export default function ServicosAuth() {
   const [params] = useSearchParams();
@@ -50,7 +51,7 @@ export default function ServicosAuth() {
         toast({ title: 'Conta criada', description: 'Bem-vindo!' });
       }
     } catch (err: any) {
-      toast({ title: 'Erro', description: err.message, variant: 'destructive' });
+      toast({ title: 'Erro', description: translateAuthError(err?.message), variant: 'destructive' });
     } finally {
       setLoading(false);
     }
@@ -71,7 +72,7 @@ export default function ServicosAuth() {
             <Input type="text" placeholder="Nome" value={name} onChange={(e) => setName(e.target.value)} required />
           )}
           <Input type="email" placeholder="E-mail" value={email} onChange={(e) => setEmail(e.target.value)} required />
-          <Input type="password" placeholder="Senha (mín. 6 caracteres)" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={6} />
+          <Input type="password" placeholder="Senha" value={password} onChange={(e) => setPassword(e.target.value)} required minLength={1} />
           <Button type="submit" disabled={loading} className="w-full bg-green-500 hover:bg-green-600 text-white h-11 rounded-full">
             {loading ? 'Carregando...' : isLogin ? 'Entrar' : 'Cadastrar'}
           </Button>
