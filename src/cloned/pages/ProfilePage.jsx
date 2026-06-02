@@ -1140,8 +1140,8 @@ function ChangePasswordCard() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (newPassword.length < 6) {
-      toast.error('A senha deve ter no mínimo 6 caracteres');
+    if (newPassword.length < 1) {
+      toast.error('Digite uma senha');
       return;
     }
     if (newPassword !== confirmPassword) {
