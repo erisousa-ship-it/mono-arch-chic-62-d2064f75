@@ -383,7 +383,10 @@ export const ErrorDebugPopup: React.FC = () => {
         );
       }
 
-      if (uploadedUrls.length === 0 && !trimmed) {
+      if (uploadedUrls.length === 0) {
+        setAttachError(
+          "Nenhum arquivo pôde ser enviado. Verifique sua sessão de admin e tente novamente — o erro NÃO foi disparado."
+        );
         return;
       }
 
