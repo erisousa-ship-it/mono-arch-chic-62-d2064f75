@@ -314,6 +314,14 @@ export const ErrorDebugPopup: React.FC = () => {
     const trimmed = text.trim();
     if (!trimmed && files.length === 0) return;
 
+    // Evita disparar instruções referindo-se a "arquivo" sem ter anexado nada.
+    if (files.length === 0 && /\b(arquiv|anexo|imagem|foto|print|screenshot|pdf|documento|enviei|envie|enviou|mandei)\b/i.test(trimmed)) {
+      setAttachError(
+        "Sua mensagem menciona um arquivo, mas nenhum foi anexado. Clique em \"+ Arquivo\" (ou cole/arraste) antes de gerar o erro."
+      );
+      return;
+    }
+
     let message = `${PREFIX}\n\n${trimmed || "(sem texto)"}`;
 
     if (files.length > 0) {
