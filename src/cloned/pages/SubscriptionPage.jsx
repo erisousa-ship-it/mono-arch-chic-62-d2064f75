@@ -157,10 +157,9 @@ export default function SubscriptionPage() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) { toast.error('Faça login primeiro'); return; }
       const value = customPix.trim() || null;
-      const { error } = await supabase
-        .from('svc_profiles')
-        .update({ pix_brcode: value })
-        .eq('user_id', session.user.id);
+      const { error } = await supabase.rpc('upsert_own_svc_profile', {
+        _values: { pix_brcode: value },
+      });
       if (error) throw error;
       setSavedPix(value || '');
       toast.success(value ? 'Sua chave PIX foi salva!' : 'Chave PIX removida.');
