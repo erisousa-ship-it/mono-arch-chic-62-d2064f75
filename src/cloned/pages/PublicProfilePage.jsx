@@ -62,7 +62,7 @@ export default function PublicProfilePage() {
       if (error) throw error;
       const url = data?.imageUrl || data?.url || data?.image_url;
       if (!url) throw new Error('Sem imagem retornada');
-      await supabase.from('svc_profiles').update({ cover_url: url }).eq('user_id', userId);
+      await supabase.rpc('upsert_own_svc_profile', { _values: { cover_url: url } });
       setProfile((p) => ({ ...p, cover_url: url }));
       toast.success('Capa gerada!');
     } catch (e) {
