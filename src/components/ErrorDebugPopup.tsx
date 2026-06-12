@@ -161,6 +161,43 @@ const uploadLargeFile = async (
  */
 export const ErrorDebugPopup: React.FC = () => {
   const { token } = useContext(ClonedAuthContext) as { token?: string | null };
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) { if (!cancelled) setIsAdmin(false); return; }
+        const { data } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', session.user.id)
+          .eq('role', 'admin')
+          .maybeSingle();
+        if (!cancelled) setIsAdmin(!!data);
+      } catch {
+        if (!cancelled) setIsAdmin(false);
+      }
+    })();
+    const { data: sub } = supabase.auth.onAuthStateChange(() => {
+      // re-check on auth changes
+      setIsAdmin(null);
+      (async () => {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) { setIsAdmin(false); return; }
+        const { data } = await supabase
+          .from('user_roles')
+          .select('role')
+          .eq('user_id', session.user.id)
+          .eq('role', 'admin')
+          .maybeSingle();
+        setIsAdmin(!!data);
+      })();
+    });
+    return () => { cancelled = true; sub.subscription.unsubscribe(); };
+  }, []);
+
   const [text, setText] = useState("");
   const [files, setFiles] = useState<AttachedFile[]>([]);
   const [attachError, setAttachError] = useState<string | null>(null);
@@ -423,6 +460,7 @@ export const ErrorDebugPopup: React.FC = () => {
   const totalKb = Math.round(files.reduce((a, f) => a + f.size, 0) / 1024);
 
   if (hidden) return null;
+  if (!isAdmin) return null;
 
   return (
     <div
