@@ -75,15 +75,17 @@ export default function ServicosPerfil() {
   const save = async () => {
     if (!me) return;
     setSaving(true);
-    const { error } = await supabase.from('svc_profiles').update({
-      display_name: displayName.trim() || 'Usuário',
-      bio: bio.trim() || null,
-      city: city.trim() || null,
-      phone: phone.trim() || null,
-      role,
-      avatar_url: avatarUrl,
-      categories: selectedCats,
-    }).eq('user_id', me);
+    const { error } = await supabase.rpc('upsert_own_svc_profile' as any, {
+      _values: {
+        display_name: displayName.trim() || 'Usuário',
+        bio: bio.trim() || null,
+        city: city.trim() || null,
+        phone: phone.trim() || null,
+        role,
+        avatar_url: avatarUrl,
+        categories: selectedCats,
+      },
+    });
     if (error) toast({ title: 'Erro ao salvar', description: error.message, variant: 'destructive' });
     else toast({ title: 'Perfil salvo!' });
     setSaving(false);
