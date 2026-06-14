@@ -15,8 +15,9 @@ const readSavedBackend = () => {
     return "";
   }
 };
+const DEFAULT_RENDER_BACKEND_URL = "https://kenia-whatsapp-backend.onrender.com";
 const ENV_BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || "").replace(/\/$/, "");
-const BACKEND_URL = ENV_BACKEND_URL || readSavedBackend();
+export const BACKEND_URL = (ENV_BACKEND_URL || readSavedBackend() || DEFAULT_RENDER_BACKEND_URL).replace(/\/$/, "");
 export const HAS_BACKEND = Boolean(BACKEND_URL);
 export const API = HAS_BACKEND ? `${BACKEND_URL}/api` : "";
 const DEFAULT_OLLAMA_URL = HAS_BACKEND
