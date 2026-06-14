@@ -2,10 +2,12 @@ import express from "express";
 import cors from "cors";
 import pino from "pino";
 import QRCode from "qrcode";
+import { rm } from "fs/promises";
 import {
   default as makeWASocket,
   useMultiFileAuthState,
   DisconnectReason,
+  fetchLatestBaileysVersion,
 } from "@whiskeysockets/baileys";
 
 const PORT = process.env.PORT || 10000;
@@ -24,7 +26,34 @@ const state = {
   qrDataUrl: null,
   connected: false,
   startingAt: 0,
+  lastError: null,
   config: { provider: "baileys", bot_enabled: true },
+};
+
+let startSeq = 0;
+let reconnectTimer = null;
+let qrWatchdogTimer = null;
+
+const connectionState = () => {
+  if (state.connected) return "open";
+  if (state.qrDataUrl) return "qr";
+  if (state.lastError) return "offline";
+  return "connecting";
+};
+
+const stopSock = (reason = "restart") => {
+  try { state.sock?.end?.(new Error(reason)); } catch {}
+  state.sock = null;
+};
+
+const resetAuthSession = async () => {
+  stopSock("reset-auth-session");
+  await rm(AUTH_DIR, { recursive: true, force: true });
+};
+
+const scheduleStart = (opts = {}) => {
+  if (reconnectTimer) clearTimeout(reconnectTimer);
+  reconnectTimer = setTimeout(() => startSock(opts).catch((e) => { state.lastError = e.message; }), opts.delay || 2000);
 };
 
 function auth(req, res, next) {
