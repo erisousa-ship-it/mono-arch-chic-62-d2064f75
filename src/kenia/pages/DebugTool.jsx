@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api } from "@/kenia/lib/api";
+import { api, getBackendUrl } from "@/kenia/lib/api";
 import { supabase } from "@/integrations/supabase/client";
 import { buildDebugInstructionMessage, deliverLovableDebugInstruction } from "@/components/debugInstruction";
 import { Card } from "@/kenia/components/ui/card";
@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { AlertTriangle, ImagePlus, Wand2, Send, Trash2, X, Download, Paperclip, Activity, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 
 const DEBUG_BUCKET = "debug-uploads";
+const WHATSAPP_BACKEND_URL = getBackendUrl() || "https://kenia-whatsapp-backend.onrender.com";
 
 export default function DebugTool() {
   const [endpoint, setEndpoint] = useState(
@@ -35,6 +36,8 @@ export default function DebugTool() {
   const [aiTesting, setAiTesting] = useState({});
   const [aiResults, setAiResults] = useState({});
   const [aiLoadingStatus, setAiLoadingStatus] = useState(false);
+  const [whatsappAiPing, setWhatsappAiPing] = useState(null);
+  const [whatsappAiTesting, setWhatsappAiTesting] = useState(false);
 
   const callAiRouter = async (body) => {
     const { data, error } = await supabase.functions.invoke("ai-router", { body });
@@ -67,6 +70,23 @@ export default function DebugTool() {
       toast.error(`${provider}: ${msg}`);
     } finally {
       setAiTesting((p) => ({ ...p, [provider]: false }));
+    }
+  };
+
+  const testWhatsappOllama = async () => {
+    setWhatsappAiTesting(true);
+    try {
+      const r = await fetch(`${WHATSAPP_BACKEND_URL}/api/ai/ping`, { headers: { "ngrok-skip-browser-warning": "true" } });
+      const data = await r.json().catch(() => ({}));
+      setWhatsappAiPing(data);
+      if (data?.chat_ok) toast.success("WhatsApp + Ollama OK");
+      else toast.error(data?.error || "Ollama não respondeu");
+    } catch (e) {
+      const msg = e?.message || String(e);
+      setWhatsappAiPing({ error: msg });
+      toast.error(`Falha no ping: ${msg}`);
+    } finally {
+      setWhatsappAiTesting(false);
     }
   };
 
