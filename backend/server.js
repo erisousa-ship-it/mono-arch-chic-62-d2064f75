@@ -102,6 +102,30 @@ const rememberMessage = (jid, role, content) => {
   return conversationHistory.get(jid);
 };
 
+async function generateDirectOllamaReply(messages) {
+  if (!OLLAMA_BASE_URL) throw new Error("OLLAMA_BASE_URL não configurado no backend WhatsApp");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 45000);
+  try {
+    const r = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      signal: controller.signal,
+      body: JSON.stringify({ model: OLLAMA_MODEL, messages, stream: false, options: { temperature: 0.2, num_predict: 220 } }),
+    });
+    const raw = await r.text();
+    if (!r.ok) throw new Error(`ollama_${r.status}: ${raw.slice(0, 300)}`);
+    const data = JSON.parse(raw || "{}");
+    const reply = String(data.message?.content || data.response || "").trim();
+    if (!reply) throw new Error("ollama_empty_response");
+    return reply;
+  } catch (e) {
+    throw new Error(e?.name === "AbortError" ? "ollama_timeout" : e.message);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function generateAiReply(jid, text) {
   const history = rememberMessage(jid, "user", text);
   const messages = [
