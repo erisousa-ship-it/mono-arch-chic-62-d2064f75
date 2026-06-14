@@ -82,6 +82,10 @@ export default function WhatsAppSettings() {
       failureCountRef.current = 0;
       setBaileysStatus(normalized);
       if (!normalized.connected) {
+        if (normalized.state === "connecting" && Number(normalized.secondsWaiting || 0) >= 30 && !normalized.hasQr) {
+          setBaileysStatus({ ...normalized, state: "timeout", last_error: "O QR não foi gerado. Crie uma nova sessão para forçar um QR limpo." });
+          return;
+        }
         try {
           const { data: qr } = await api.get("/whatsapp/baileys/qr");
           setBaileysQr(qr);
@@ -139,6 +143,25 @@ export default function WhatsAppSettings() {
       setTimeout(pollBaileys, 1500);
     } catch {
       toast.error("Erro ao reconectar — verifique logs do backend");
+    } finally {
+      setBaileysLoggingOut(false);
+    }
+  };
+
+  const baileysResetSession = async () => {
+    if (!hasBackend() || baileysStatus?.state === "static") {
+      toast.warning("Configure a URL do backend publicado em WhatsApp Connection para gerar o QR real.", { duration: 9000 });
+      return;
+    }
+    setBaileysLoggingOut(true);
+    try {
+      const { data } = await api.post("/whatsapp/baileys/reset-session");
+      toast.success("Sessão limpa — gerando QR novo...");
+      setBaileysStatus(data);
+      setBaileysQr(data?.qr ? { qr: data.qr } : null);
+      setTimeout(pollBaileys, 2500);
+    } catch (e) {
+      toast.error("Erro ao criar nova sessão — verifique logs do backend");
     } finally {
       setBaileysLoggingOut(false);
     }
@@ -642,16 +665,26 @@ export default function WhatsAppSettings() {
                           <AlertTriangle className="w-4 h-4" />
                           Serviço externo indisponível
                         </div>
+                      ) : baileysStatus?.state === "timeout" ? (
+                        <div className="flex items-center gap-2 text-gold-700 font-medium">
+                          <AlertTriangle className="w-4 h-4" />
+                          QR não foi gerado
+                        </div>
+                      ) : baileysStatus?.state === "qr" || baileysQr?.qr ? (
+                        <div className="flex items-center gap-2 text-gold-700 font-medium">
+                          <QrCode className="w-4 h-4" />
+                          QR pronto para escanear
+                        </div>
                       ) : (
                         <div className="flex items-center gap-2 text-gold-700 font-medium">
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          {baileysStatus?.state === "connecting" ? "Aguardando leitura do QR..." : "Inicializando..."}
+                          {baileysStatus?.state === "connecting" ? "Gerando QR Code..." : "Inicializando..."}
                         </div>
                       )}
                       <div className="text-xs text-nude-500 mt-1">
                         Estado: <code className="bg-white px-1.5 py-0.5 rounded text-[11px]">{baileysStatus?.state || "—"}</code>
                       </div>
-                      {baileysStatus?.last_error && (baileysStatus?.state === "conflicted" || baileysStatus?.state === "offline" || baileysStatus?.state === "static") && (
+                      {baileysStatus?.last_error && (baileysStatus?.state === "conflicted" || baileysStatus?.state === "offline" || baileysStatus?.state === "static" || baileysStatus?.state === "timeout") && (
                         <div className="text-xs text-gold-800 mt-2 p-2 bg-gold-50 border border-gold-200 rounded" data-testid="baileys-conflict-msg">
                           ⚠️ {baileysStatus.last_error}
                         </div>
@@ -676,6 +709,19 @@ export default function WhatsAppSettings() {
                             <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
                           )}
                           Reconectar serviço
+                        </Button>
+                      )}
+                      {!baileysStatus?.connected && baileysStatus?.state !== "static" && hasBackend() && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={baileysResetSession}
+                          disabled={baileysLoggingOut}
+                          className="text-rose-700 hover:text-rose-800 hover:bg-rose-50 border-rose-300"
+                          data-testid="baileys-reset-session"
+                        >
+                          {baileysLoggingOut ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <QrCode className="w-3.5 h-3.5 mr-1.5" />}
+                          Nova sessão / QR limpo
                         </Button>
                       )}
                       {baileysStatus?.connected && (
