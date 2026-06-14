@@ -1065,6 +1065,69 @@ function SocialConnections() {
 }
 
 function SettingsPanel() {
+  return _SettingsPanelInner();
+}
+
+function IntegrationsCard() {
+  const [status, setStatus] = useState(null);
+  const [testing, setTesting] = useState(null);
+  const [result, setResult] = useState({});
+  const PROVIDERS = [
+    { id: 'emergent', label: 'Emergent', tag: '1º (prioridade)' },
+    { id: 'ollama', label: 'Ollama', tag: '2º' },
+    { id: 'lovable', label: 'Lovable AI', tag: '3º (fallback)' },
+  ];
+  useEffect(() => {
+    supabase.functions.invoke('ai-router', { body: { action: 'status' } })
+      .then(({ data }) => setStatus(data)).catch(() => setStatus({}));
+  }, []);
+  const test = async (p) => {
+    setTesting(p); setResult((r) => ({ ...r, [p]: null }));
+    const { data, error } = await supabase.functions.invoke('ai-router', { body: { action: 'test', provider: p } });
+    setResult((r) => ({ ...r, [p]: error ? { ok: false, error: error.message } : data }));
+    setTesting(null);
+  };
+  return (
+    <Card className="p-6">
+      <div style={{ fontFamily: serif, color: 'white' }} className="text-xl mb-1">Integrações de IA</div>
+      <div className="text-xs mb-4" style={{ color: 'rgba(246,239,229,0.6)' }}>
+        Ordem de prioridade: Emergent → Ollama → Lovable AI. Configure as chaves nos secrets do Cloud.
+      </div>
+      <div className="space-y-2">
+        {PROVIDERS.map((p) => {
+          const configured = status?.[p.id];
+          const r = result[p.id];
+          return (
+            <div key={p.id} className="flex items-center justify-between p-3 rounded-md" style={{ border: `1px solid ${LINE}`, background: 'rgba(255,255,255,0.02)' }}>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-white">{p.label}</span>
+                  <Pill color={GOLD_SOFT}>{p.tag}</Pill>
+                  <Pill color={configured ? '#5ac28a' : '#c66'}>{configured ? 'Configurado' : 'Faltando'}</Pill>
+                </div>
+                {r && (
+                  <div className="text-[11px] mt-1" style={{ color: r.ok ? '#5ac28a' : '#e88' }}>
+                    {r.ok ? 'Conexão OK' : `Falhou: ${r.error}`}
+                  </div>
+                )}
+              </div>
+              <button onClick={() => test(p.id)} disabled={testing === p.id}
+                className="px-3 py-1.5 rounded-md text-xs disabled:opacity-50"
+                style={{ border: `1px solid ${LINE}`, color: CREAM }}>
+                {testing === p.id ? 'Testando...' : 'Testar conexão'}
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <div className="text-[11px] mt-3" style={{ color: 'rgba(246,239,229,0.5)' }}>
+        Secrets esperados: <b>EMERGENT_API_KEY</b>, <b>EMERGENT_BASE_URL</b>, <b>OLLAMA_BASE_URL</b>, <b>LOVABLE_API_KEY</b>.
+      </div>
+    </Card>
+  );
+}
+
+function _SettingsPanelInner() {
   return (
     <div className="max-w-3xl space-y-6">
       <IntegrationsCard />
