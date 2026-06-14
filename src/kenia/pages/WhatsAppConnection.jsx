@@ -19,7 +19,7 @@ const EP_QR = "/api/whatsapp/qr";
 const EP_RESTART = "/api/whatsapp/baileys/restart";
 const EP_LOGOUT = "/api/whatsapp/logout";
 
-const DEFAULT_BASE = (import.meta.env.VITE_BACKEND_URL || "https://kenia-whatsapp-backend.onrender.com").replace(/\/api\/?$/, "");
+const DEFAULT_BASE = (import.meta.env.VITE_BACKEND_URL || "").replace(/\/api\/?$/, "");
 
 const normalizeQrImage = async (raw) => {
   if (!raw || typeof raw !== "string") return null;
