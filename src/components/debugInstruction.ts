@@ -11,8 +11,7 @@ export const dispatchLovableDebugError = (message: string) => {
 };
 
 export const deliverLovableDebugInstruction = (message: string) => {
-  dispatchLovableDebugError(message);
-  return "skipped" as const;
+  return dispatchLovableDebugError(message) ? ("dispatched" as const) : ("skipped" as const);
 };
 
 

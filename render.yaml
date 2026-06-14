@@ -1,19 +1,19 @@
 services:
   - type: web
-    name: jatai-whatsapp-backend
+    name: jatai-app
     runtime: docker
-    rootDir: backend
+    rootDir: .
     plan: free
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /api
     autoDeploy: true
     envVars:
-      - key: NODE_ENV
-        value: production
-      - key: PORT
-        value: 8080
-      - key: SESSION_DIR
-        value: /app/session
-      - key: INTERNAL_TOKEN
+      - key: VITE_SUPABASE_URL
+        value: https://bcafttsxvperfslgjphb.supabase.co
+      - key: VITE_SUPABASE_PROJECT_ID
+        value: bcafttsxvperfslgjphb
+      - key: VITE_SUPABASE_PUBLISHABLE_KEY
+        value: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJjYWZ0dHN4dnBlcmZzbGdqcGhiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc5NzQwNTYsImV4cCI6MjA4MzU1MDA1Nn0.eaCDIVgdvm31TCK1qTnbdh-SNUw718UFAsGWd7ifvPc
+      - key: VITE_GOOGLE_MAPS_API_KEY
         sync: false
