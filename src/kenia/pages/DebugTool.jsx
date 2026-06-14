@@ -438,6 +438,9 @@ export default function DebugTool() {
                   const configured = aiStatus && aiStatus[p];
                   const url = aiStatus?.[`${p}_url`];
                   const result = aiResults[p];
+                  const isOllama = p === "ollama";
+                  const ollamaUrlCheck = isOllama ? aiStatus?.ollama_url_check : null;
+                  const canTest = !!configured && (!isOllama || ollamaUrlCheck?.is_public);
                   return (
                     <div key={p} className="flex items-center justify-between gap-3 p-3 border border-nude-200 rounded bg-white">
                       <div className="flex items-center gap-3 min-w-0">
@@ -453,15 +456,20 @@ export default function DebugTool() {
                           <div className="text-xs text-nude-500 truncate">
                             {configured == null ? "—" : configured ? (url || "configurado") : "não configurado"}
                           </div>
+                          {isOllama && ollamaUrlCheck && (
+                            <div className={`text-xs mt-1 ${ollamaUrlCheck.is_public ? "text-emerald-700" : "text-rose-600"}`}>
+                              {ollamaUrlCheck.is_public ? "OLLAMA_BASE_URL pública" : `OLLAMA_BASE_URL não pública: ${ollamaUrlCheck.reason}`}
+                            </div>
+                          )}
                           {result && (
                             <div className={`text-xs mt-1 ${result.ok ? "text-emerald-700" : "text-rose-600"}`}>
-                              {result.ok ? "Ping OK" : `Erro: ${result.error}`}
+                              {result.ok ? `Ping OK${result.url_check?.ping_ms ? ` (${result.url_check.ping_ms}ms)` : ""}` : `Erro: ${result.error}`}
                             </div>
                           )}
                         </div>
                       </div>
-                      <Button size="sm" variant="outline" disabled={!configured || aiTesting[p]} onClick={() => testAiProvider(p)}>
-                        {aiTesting[p] ? <Loader2 className="w-4 h-4 animate-spin" /> : "Testar"}
+                      <Button size="sm" variant="outline" disabled={!canTest || aiTesting[p]} onClick={() => testAiProvider(p)}>
+                        {aiTesting[p] ? <Loader2 className="w-4 h-4 animate-spin" /> : isOllama ? "Ping" : "Testar"}
                       </Button>
                     </div>
                   );
