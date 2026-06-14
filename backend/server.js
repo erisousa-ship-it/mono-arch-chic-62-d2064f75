@@ -79,6 +79,89 @@ function auth(req, res, next) {
   next();
 }
 
+const extractTextMessage = (message = {}) => {
+  const content = message.ephemeralMessage?.message || message.viewOnceMessage?.message || message;
+  return (
+    content.conversation ||
+    content.extendedTextMessage?.text ||
+    content.imageMessage?.caption ||
+    content.videoMessage?.caption ||
+    ""
+  ).trim();
+};
+
+const isReplyableJid = (jid = "") => {
+  return jid.endsWith("@s.whatsapp.net") || jid.endsWith("@g.us");
+};
+
+const rememberMessage = (jid, role, content) => {
+  const history = conversationHistory.get(jid) || [];
+  history.push({ role, content: String(content || "").slice(0, 1200) });
+  conversationHistory.set(jid, history.slice(-12));
+  return conversationHistory.get(jid);
+};
+
+async function generateAiReply(jid, text) {
+  const history = rememberMessage(jid, "user", text);
+  const messages = [
+    { role: "system", content: state.config.bot_prompt || DEFAULT_BOT_PROMPT },
+    ...history,
+  ];
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 25000);
+  try {
+    const r = await fetch(AI_ROUTER_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(SUPABASE_ANON_KEY ? { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } : {}),
+      },
+      signal: controller.signal,
+      body: JSON.stringify({ mode: "chat", messages, model: OLLAMA_MODEL }),
+    });
+    const raw = await r.text();
+    if (!r.ok) throw new Error(`ai-router_${r.status}: ${raw.slice(0, 300)}`);
+    const data = JSON.parse(raw || "{}");
+    const reply = String(data.text || data.response || "").trim();
+    if (!reply) throw new Error("ai-router_empty_response");
+    rememberMessage(jid, "assistant", reply);
+    state.lastAiError = null;
+    return reply;
+  } catch (e) {
+    const msg = e?.name === "AbortError" ? "ai-router_timeout" : e.message;
+    state.lastAiError = msg;
+    throw new Error(msg);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function handleIncomingMessage(msg) {
+  const jid = msg.key?.remoteJid;
+  const id = msg.key?.id;
+  if (!state.config.bot_enabled || msg.key?.fromMe || !jid || !id || !msg.message || !isReplyableJid(jid)) return;
+  if (processedMessages.has(id)) return;
+  processedMessages.add(id);
+  if (processedMessages.size > 500) processedMessages.clear();
+
+  const text = extractTextMessage(msg.message);
+  if (!text) return;
+
+  try {
+    await state.sock?.sendPresenceUpdate?.("composing", jid);
+    const reply = await generateAiReply(jid, text);
+    await state.sock?.sendMessage(jid, { text: reply }, { quoted: msg });
+    state.lastAutoReplyAt = Date.now();
+    state.autoReplyCount += 1;
+  } catch (e) {
+    state.lastAiError = e.message;
+    console.error("auto reply failed", e);
+  } finally {
+    try { await state.sock?.sendPresenceUpdate?.("paused", jid); } catch {}
+  }
+}
+
 async function startSock({ clearAuth = false } = {}) {
   const seq = ++startSeq;
   if (clearAuth) await resetAuthSession();
