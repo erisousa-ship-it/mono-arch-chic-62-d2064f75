@@ -15,9 +15,14 @@ const readSavedBackend = () => {
     return "";
   }
 };
-const ENV_BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || "").replace(/\/$/, "");
-const BACKEND_URL = ENV_BACKEND_URL || readSavedBackend();
-export const HAS_BACKEND = Boolean(BACKEND_URL);
+export const getBackendUrl = () => {
+  const env = (import.meta.env.VITE_BACKEND_URL || "").trim();
+  const raw = env || readSavedBackend();
+  return raw.replace(/\/+$/, "").replace(/\/api$/, "");
+};
+const BACKEND_URL = getBackendUrl();
+export const hasBackend = () => Boolean(getBackendUrl());
+export const HAS_BACKEND = hasBackend();
 export const API = HAS_BACKEND ? `${BACKEND_URL}/api` : "";
 const DEFAULT_OLLAMA_URL = HAS_BACKEND
   ? `${API}/generate`
