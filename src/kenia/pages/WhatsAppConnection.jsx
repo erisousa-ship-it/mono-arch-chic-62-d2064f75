@@ -19,7 +19,7 @@ const EP_QR = "/api/whatsapp/qr";
 const EP_RESTART = "/api/whatsapp/baileys/restart";
 const EP_LOGOUT = "/api/whatsapp/logout";
 
-const DEFAULT_BASE = import.meta.env.VITE_BACKEND_URL || "";
+const DEFAULT_BASE = (import.meta.env.VITE_BACKEND_URL || "").replace(/\/api\/?$/, "");
 
 const normalizeQrImage = async (raw) => {
   if (!raw || typeof raw !== "string") return null;
@@ -67,7 +67,8 @@ export default function WhatsAppConnection() {
   const callApi = useCallback(
     async (path, method = "GET") => {
       if (!baseUrl) throw new Error("Configure a URL base do backend.");
-      const url = `${baseUrl.replace(/\/$/, "")}${path}`;
+      const cleanBase = baseUrl.trim().replace(/\/+$/, "").replace(/\/api$/, "");
+      const url = `${cleanBase}${path}`;
       const res = await fetch(url, { method, headers: headers() });
       const ct = res.headers.get("content-type") || "";
       const raw = ct.includes("application/json") ? await res.json() : await res.text();

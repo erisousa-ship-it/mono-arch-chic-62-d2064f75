@@ -1287,7 +1287,14 @@ liveApi.interceptors.response.use(
 const cloudFirstGetPaths = new Set(["/appointments", "/legal-deadlines", "/creatives", "/whatsapp/default-prompt", "/legislation/today"]);
 const cloudFirstPostPaths = new Set(["/creatives/generate", "/creatives/fuse-images", "/appointments", "/legal-deadlines", "/legal-deadlines/sync"]);
 const liveFirstWithStaticFallbackPostPaths = new Set(["/chat/message"]);
-const fallbackToStaticPostPaths = new Set(["/debug/instruction"]);
+const fallbackToStaticPostPaths = new Set([
+  "/debug/instruction",
+  "/whatsapp/test-connection",
+  "/whatsapp/baileys/reconnect",
+  "/whatsapp/baileys/restart",
+  "/whatsapp/baileys/logout",
+  "/whatsapp/logout",
+]);
 
 // Caminhos que, quando o backend live (Render) falha ou devolve lista vazia,
 // caem para os dados estáticos de demonstração — assim o painel nunca aparece
