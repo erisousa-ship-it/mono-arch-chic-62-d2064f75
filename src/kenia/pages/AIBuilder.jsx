@@ -17,6 +17,7 @@ import {
   Download, Copy, ChevronDown, ChevronUp, FileText, Key, KeyRound, RefreshCw,
 } from "lucide-react";
 import { liveApi } from "@/kenia/lib/api";
+import { supabase } from "@/integrations/supabase/client";
 
 const PROGRESS_EVENTS = {
   received_prompt: { label: "Recebendo prompt", icon: "📨" },
@@ -27,6 +28,7 @@ const PROGRESS_EVENTS = {
 };
 
 const PROVIDERS_FALLBACK = [
+  { id: "emergent", label: "Emergent (universal · fallback Lovable AI)", default_model: "emergent-default", models: ["emergent-default", "google/gemini-3-flash-preview"] },
   { id: "anthropic", label: "Anthropic Claude Sonnet 4.6 (recomendado p/ código)", default_model: "claude-sonnet-4-6", models: ["claude-sonnet-4-6", "claude-opus-4-8", "claude-opus-4-7", "claude-haiku-4-5-20251001"] },
   { id: "openai", label: "OpenAI GPT-5.4", default_model: "gpt-5.4", models: ["gpt-5.4", "gpt-5.4-mini", "gpt-5.2", "gpt-4o"] },
   { id: "gemini", label: "Google Gemini 3.1 Pro", default_model: "gemini-3.1-pro-preview", models: ["gemini-3.1-pro-preview", "gemini-3-flash-preview"] },
@@ -51,11 +53,11 @@ export default function AIBuilder() {
   const [generatedPlan, setGeneratedPlan] = useState(null);
   const [expandedFiles, setExpandedFiles] = useState({});
   const [providers, setProviders] = useState(PROVIDERS_FALLBACK);
-  const [provider, setProvider] = useState("anthropic");
-  const [model, setModel] = useState("claude-sonnet-4-6");
+  const [provider, setProvider] = useState("emergent");
+  const [model, setModel] = useState("emergent-default");
   const [keys, setKeys] = useState(loadKeys());
   const [keyDialogOpen, setKeyDialogOpen] = useState(false);
-  const [keyDraft, setKeyDraft] = useState({ anthropic: "", openai: "", gemini: "" });
+  const [keyDraft, setKeyDraft] = useState({ emergent: "", anthropic: "", openai: "", gemini: "" });
   const [projects, setProjects] = useState(loadProjects());
   const [currentProjectId, setCurrentProjectId] = useState("");
   const scrollRef = useRef(null);
@@ -97,12 +99,42 @@ export default function AIBuilder() {
     ]);
 
     try {
-      const { data } = await liveApi.post("/ai-builder/generate", {
-        prompt: prompt.trim(),
-        provider,
-        model,
-        api_key: currentKey || undefined,
-      }, { timeout: 180000 });
+      let data;
+      try {
+        const res = await liveApi.post("/ai-builder/generate", {
+          prompt: prompt.trim(),
+          provider,
+          model,
+          api_key: currentKey || undefined,
+        }, { timeout: 180000 });
+        data = res.data;
+      } catch (backendErr) {
+        // Fallback: chama ai-router (Emergent → Lovable AI) e pede plano em JSON
+        const sys = `Você é um gerador de plano de código tipo Lovable. Responda APENAS com JSON válido no formato: {"overview": string, "files":[{"path": string, "content": string}], "next_steps": string[]}. Nada fora do JSON.`;
+        const { data: aiData, error: aiErr } = await supabase.functions.invoke("ai-router", {
+          body: {
+            mode: "chat",
+            messages: [
+              { role: "system", content: sys },
+              { role: "user", content: prompt.trim() },
+            ],
+            model,
+          },
+        });
+        if (aiErr) throw aiErr;
+        const text = (aiData?.text || "").trim();
+        const jsonText = text.replace(/^```(?:json)?\s*|\s*```$/g, "");
+        let parsed;
+        try { parsed = JSON.parse(jsonText); }
+        catch { parsed = { overview: text, files: [], next_steps: [] }; }
+        data = {
+          ok: true,
+          provider: aiData?.provider || provider,
+          model,
+          warning: `Fallback via ${aiData?.provider || "ai-router"} (backend Emergent indisponível)`,
+          ...parsed,
+        };
+      }
 
       if (!data?.ok) throw new Error(data?.error || "Falha desconhecida");
 
@@ -147,6 +179,7 @@ export default function AIBuilder() {
 
   const openKeyDialog = () => {
     setKeyDraft({
+      emergent: keys.emergent || "",
       anthropic: keys.anthropic || "",
       openai: keys.openai || "",
       gemini: keys.gemini || "",
@@ -424,6 +457,11 @@ export default function AIBuilder() {
               Emergent. Deixe em branco para usar a chave universal Emergent.
               <br />As chaves ficam armazenadas apenas neste navegador (localStorage).
             </p>
+            <div>
+              <Label>Emergent</Label>
+              <Input type="password" placeholder="emg-..." value={keyDraft.emergent} onChange={(e) => setKeyDraft({ ...keyDraft, emergent: e.target.value })} data-testid="ai-builder-key-emergent" />
+              <p className="text-[10px] text-nude-500 mt-1">Se vazia, usamos a chave Emergent universal do servidor e caímos para Lovable AI automaticamente.</p>
+            </div>
             <div>
               <Label>Anthropic (Claude)</Label>
               <Input type="password" placeholder="sk-ant-..." value={keyDraft.anthropic} onChange={(e) => setKeyDraft({ ...keyDraft, anthropic: e.target.value })} data-testid="ai-builder-key-anthropic" />
