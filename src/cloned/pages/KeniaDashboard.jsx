@@ -5,7 +5,7 @@ import {
   Sparkles, BarChart3, Settings, LogOut, Search, Plus, Mic, Send, QrCode,
   CheckCircle2, Clock, TrendingUp, Users, DollarSign, Bell, ArrowUpRight,
   Phone, Paperclip, MoreHorizontal, Power, RefreshCw, Copy, Smartphone, Webhook,
-  Shield, Volume2,
+  Shield, Volume2, Bot, Workflow, ImagePlus, Share2, ScrollText, UserCog, Briefcase, X,
 } from 'lucide-react';
 import { AuthContext } from '../ClonedAuthContext';
 
@@ -22,12 +22,18 @@ const LINE = 'rgba(185,137,63,0.18)';
 const NAV = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
+  { id: 'chatia', label: 'Chat IA', icon: Bot },
   { id: 'crm', label: 'CRM Kanban', icon: Kanban },
   { id: 'processos', label: 'Processos', icon: FileText },
   { id: 'agenda', label: 'Agenda', icon: Calendar },
   { id: 'financeiro', label: 'Financeiro', icon: Wallet },
   { id: 'criativos', label: 'Criativos IA', icon: Sparkles },
+  { id: 'imagefusion', label: 'Image Fusion', icon: ImagePlus },
+  { id: 'aibuilder', label: 'AI Builder', icon: Workflow },
+  { id: 'social', label: 'Conexões Sociais', icon: Share2 },
   { id: 'metricas', label: 'Métricas', icon: BarChart3 },
+  { id: 'admincases', label: 'Admin Casos', icon: Briefcase },
+  { id: 'settings', label: 'Configurações', icon: UserCog },
 ];
 
 const KPIS = [
