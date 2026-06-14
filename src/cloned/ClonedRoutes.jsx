@@ -8,6 +8,7 @@ import LandingPage from './pages/LandingPage';
 import AuthPage from './pages/AuthPage';
 import HomePage from './pages/HomePage';
 import FeedPage from './pages/FeedPage';
+import KeniaDashboard from './pages/KeniaDashboard';
 import AIChat from './pages/AIChat';
 import MessagesPage from './pages/MessagesPage';
 import ServicesPage from './pages/ServicesPage';
@@ -143,8 +144,8 @@ export function clonedRoutes(user) {
     <Route key="cloned-servicos" path="/servicos" element={!user ? <LandingPage /> : <Navigate to="/home" />} />,
     <Route key="cloned-auth" path="/auth" element={!user ? <AuthPage /> : <Navigate to="/home" />} />,
     <Route key="cloned-servicos-auth" path="/servicos/auth" element={!user ? <AuthPage /> : <Navigate to="/home" />} />,
-    <Route key="cloned-home" path="/home" element={<FeedPage />} />,
-    <Route key="cloned-servicos-home" path="/servicos/home" element={<FeedPage />} />,
+    <Route key="cloned-home" path="/home" element={user ? <KeniaDashboard /> : <Navigate to="/" />} />,
+    <Route key="cloned-servicos-home" path="/servicos/home" element={user ? <KeniaDashboard /> : <Navigate to="/" />} />,
     <Route key="cloned-home-old" path="/home-old" element={<HomePage />} />,
     <Route key="cloned-chat" path="/chat" element={<MessagesPage />} />,
     <Route key="cloned-servicos-chat" path="/servicos/chat" element={<MessagesPage />} />,
