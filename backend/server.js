@@ -75,7 +75,6 @@ async function startSock({ clearAuth = false } = {}) {
   state.qrDataUrl = null;
   state.connected = false;
   state.lastError = null;
-  if (clearAuth) state.qrAttempts = 0;
 
   const { state: authState, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version } = await fetchLatestBaileysVersion();
@@ -196,6 +195,7 @@ app.post("/api/whatsapp/baileys/reconnect", auth, async (_req, res) => {
 
 app.post("/api/whatsapp/baileys/reset-session", auth, async (_req, res) => {
   try {
+    state.qrAttempts = 0;
     await startSock({ clearAuth: true });
     res.json({ ok: true, connected: false, state: connectionState(), qr: state.qrDataUrl });
   } catch (e) {
