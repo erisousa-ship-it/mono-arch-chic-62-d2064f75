@@ -5,7 +5,7 @@ import {
   Sparkles, BarChart3, Settings, LogOut, Search, Plus, Mic, Send, QrCode,
   CheckCircle2, Clock, TrendingUp, Users, DollarSign, Bell, ArrowUpRight,
   Phone, Paperclip, MoreHorizontal, Power, RefreshCw, Copy, Smartphone, Webhook,
-  Shield, Volume2,
+  Shield, Volume2, Bot, Workflow, ImagePlus, Share2, ScrollText, UserCog, Briefcase, X,
 } from 'lucide-react';
 import { AuthContext } from '../ClonedAuthContext';
 
@@ -22,12 +22,18 @@ const LINE = 'rgba(185,137,63,0.18)';
 const NAV = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
+  { id: 'chatia', label: 'Chat IA', icon: Bot },
   { id: 'crm', label: 'CRM Kanban', icon: Kanban },
   { id: 'processos', label: 'Processos', icon: FileText },
   { id: 'agenda', label: 'Agenda', icon: Calendar },
   { id: 'financeiro', label: 'Financeiro', icon: Wallet },
   { id: 'criativos', label: 'Criativos IA', icon: Sparkles },
+  { id: 'imagefusion', label: 'Image Fusion', icon: ImagePlus },
+  { id: 'aibuilder', label: 'AI Builder', icon: Workflow },
+  { id: 'social', label: 'Conexões Sociais', icon: Share2 },
   { id: 'metricas', label: 'Métricas', icon: BarChart3 },
+  { id: 'admincases', label: 'Admin Casos', icon: Briefcase },
+  { id: 'settings', label: 'Configurações', icon: UserCog },
 ];
 
 const KPIS = [
@@ -877,9 +883,245 @@ function Metricas() {
   );
 }
 
+function ChatIA() {
+  const [msgs, setMsgs] = useState([
+    { role: 'ai', text: 'Olá! Sou a IA jurídica do escritório. Posso resumir processos, redigir petições e tirar dúvidas. Como posso ajudar?' },
+  ]);
+  const [input, setInput] = useState('');
+  const send = () => {
+    if (!input.trim()) return;
+    const q = input.trim();
+    setMsgs((m) => [...m, { role: 'user', text: q }]);
+    setInput('');
+    setTimeout(() => setMsgs((m) => [...m, { role: 'ai', text: 'Analisando sua questão com base em jurisprudência recente...' }]), 600);
+  };
+  return (
+    <div className="grid grid-cols-12 gap-6 h-[calc(100vh-180px)]">
+      <Card className="col-span-3 p-4 overflow-y-auto">
+        <div style={{ fontFamily: serif, color: 'white' }} className="text-lg mb-3">Conversas</div>
+        {['Demissão sem justa causa', 'Pensão alimentícia', 'Revisão de aposentadoria', 'Contrato de honorários'].map((t) => (
+          <button key={t} className="w-full text-left px-3 py-2 rounded-md text-xs mb-1 hover:bg-white/5" style={{ color: 'rgba(246,239,229,0.75)' }}>{t}</button>
+        ))}
+        <button className="w-full mt-3 px-3 py-2 rounded-md text-xs flex items-center gap-2" style={{ background: `${GOLD}26`, color: 'white' }}>
+          <Plus className="w-3.5 h-3.5" /> Nova conversa
+        </button>
+      </Card>
+      <Card className="col-span-9 flex flex-col">
+        <div className="flex-1 p-6 overflow-y-auto space-y-3">
+          {msgs.map((m, i) => (
+            <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div className="max-w-[75%] px-4 py-2.5 rounded-2xl text-sm" style={{
+                background: m.role === 'user' ? GOLD : 'rgba(255,255,255,0.04)',
+                color: m.role === 'user' ? 'white' : CREAM,
+                border: m.role === 'user' ? 'none' : `1px solid ${LINE}`,
+              }}>{m.text}</div>
+            </div>
+          ))}
+        </div>
+        <div className="p-4 border-t flex gap-2" style={{ borderColor: LINE }}>
+          <input value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && send()}
+            placeholder="Pergunte sobre um processo, lei ou redija uma petição..."
+            className="flex-1 px-4 py-2.5 rounded-md text-sm outline-none"
+            style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${LINE}`, color: CREAM }} />
+          <button onClick={send} className="px-4 rounded-md" style={{ background: GOLD, color: 'white' }}>
+            <Send className="w-4 h-4" />
+          </button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function AIBuilder() {
+  const [steps, setSteps] = useState([
+    { id: 1, type: 'Gatilho', label: 'Mensagem WhatsApp recebida' },
+    { id: 2, type: 'IA', label: 'Classificar área jurídica' },
+    { id: 3, type: 'Ação', label: 'Criar lead no CRM' },
+    { id: 4, type: 'Resposta', label: 'Enviar resposta automática' },
+  ]);
+  const addStep = () => setSteps((s) => [...s, { id: Date.now(), type: 'Ação', label: 'Nova etapa' }]);
+  return (
+    <div className="grid grid-cols-12 gap-6">
+      <Card className="col-span-8 p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <div style={{ fontFamily: serif, color: 'white' }} className="text-xl">Fluxo de automação</div>
+            <div className="text-xs" style={{ color: 'rgba(246,239,229,0.6)' }}>Monte fluxos com IA sem código</div>
+          </div>
+          <button onClick={addStep} className="px-3 py-2 rounded-md text-xs flex items-center gap-2" style={{ background: GOLD, color: 'white' }}>
+            <Plus className="w-3.5 h-3.5" /> Adicionar etapa
+          </button>
+        </div>
+        <div className="space-y-3">
+          {steps.map((s, i) => (
+            <div key={s.id} className="flex items-center gap-3">
+              <div className="w-7 h-7 rounded-full flex items-center justify-center text-[11px]" style={{ background: GOLD, color: 'white' }}>{i + 1}</div>
+              <div className="flex-1 p-3 rounded-md flex items-center justify-between" style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${LINE}` }}>
+                <div>
+                  <Pill>{s.type}</Pill>
+                  <div className="text-sm mt-1 text-white">{s.label}</div>
+                </div>
+                <button onClick={() => setSteps((arr) => arr.filter((x) => x.id !== s.id))} className="text-xs" style={{ color: 'rgba(246,239,229,0.5)' }}>
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
+      <Card className="col-span-4 p-6">
+        <div style={{ fontFamily: serif, color: 'white' }} className="text-lg mb-3">Templates prontos</div>
+        {['Triagem inicial de cliente', 'Lembrete de audiência', 'Cobrança automática', 'Pós-atendimento NPS'].map((t) => (
+          <button key={t} className="w-full text-left px-3 py-2.5 rounded-md text-xs mb-2 hover:bg-white/5" style={{ color: CREAM, border: `1px solid ${LINE}` }}>
+            {t}
+          </button>
+        ))}
+      </Card>
+    </div>
+  );
+}
+
+function ImageFusion() {
+  const [prompt, setPrompt] = useState('Combinar foto da Dra. Kênia com cenário de tribunal estilo editorial');
+  return (
+    <div className="grid grid-cols-12 gap-6">
+      <Card className="col-span-4 p-6">
+        <div style={{ fontFamily: serif, color: 'white' }} className="text-lg mb-4">Combinar imagens</div>
+        {[1, 2].map((n) => (
+          <div key={n} className="mb-3 p-6 rounded-md text-center text-xs cursor-pointer hover:bg-white/5"
+            style={{ border: `1.5px dashed ${LINE}`, color: 'rgba(246,239,229,0.6)' }}>
+            <ImagePlus className="w-6 h-6 mx-auto mb-2" style={{ color: GOLD }} />
+            Imagem {n} — clique para enviar
+          </div>
+        ))}
+        <label className="text-[11px] uppercase tracking-wider" style={{ color: GOLD_SOFT }}>Instrução</label>
+        <textarea value={prompt} onChange={(e) => setPrompt(e.target.value)} rows={3}
+          className="w-full mt-2 p-3 rounded-md text-sm outline-none"
+          style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${LINE}`, color: CREAM }} />
+        <button className="w-full mt-3 py-2.5 rounded-md text-sm" style={{ background: GOLD, color: 'white' }}>
+          Gerar fusão com IA
+        </button>
+      </Card>
+      <Card className="col-span-8 p-6">
+        <div style={{ fontFamily: serif, color: 'white' }} className="text-lg mb-4">Resultado</div>
+        <div className="aspect-video rounded-md flex items-center justify-center" style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${LINE}` }}>
+          <div className="text-center" style={{ color: 'rgba(246,239,229,0.5)' }}>
+            <Sparkles className="w-10 h-10 mx-auto mb-2" style={{ color: GOLD }} />
+            <div className="text-sm">Envie duas imagens e descreva a fusão</div>
+          </div>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function SocialConnections() {
+  const NETS = [
+    { name: 'Instagram', desc: 'Publicação automática de criativos', connected: true },
+    { name: 'Facebook', desc: 'Posts e anúncios via Meta', connected: true },
+    { name: 'LinkedIn', desc: 'Conteúdo profissional', connected: false },
+    { name: 'Google Business', desc: 'Avaliações e horário do escritório', connected: false },
+    { name: 'YouTube', desc: 'Vídeos curtos e lives', connected: false },
+    { name: 'TikTok', desc: 'Shorts jurídicos', connected: false },
+  ];
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+      {NETS.map((n) => (
+        <Card key={n.name} className="p-5">
+          <div className="flex items-start justify-between mb-3">
+            <Share2 className="w-6 h-6" style={{ color: GOLD }} />
+            <Pill color={n.connected ? '#5ac28a' : GOLD_SOFT}>{n.connected ? 'Conectado' : 'Desconectado'}</Pill>
+          </div>
+          <div style={{ fontFamily: serif, color: 'white' }} className="text-lg">{n.name}</div>
+          <div className="text-xs mb-4" style={{ color: 'rgba(246,239,229,0.6)' }}>{n.desc}</div>
+          <button className="w-full py-2 rounded-md text-xs"
+            style={{ background: n.connected ? 'transparent' : GOLD, color: n.connected ? CREAM : 'white', border: n.connected ? `1px solid ${LINE}` : 'none' }}>
+            {n.connected ? 'Desconectar' : 'Conectar'}
+          </button>
+        </Card>
+      ))}
+    </div>
+  );
+}
+
+function SettingsPanel() {
+  return (
+    <div className="max-w-3xl space-y-6">
+      <Card className="p-6">
+        <div style={{ fontFamily: serif, color: 'white' }} className="text-xl mb-4">Perfil do escritório</div>
+        <div className="grid grid-cols-2 gap-4">
+          {[
+            { l: 'Nome', v: 'Dra. Kênia Garcia' },
+            { l: 'OAB', v: 'OAB/GO 123.456' },
+            { l: 'E-mail', v: 'contato@keniagarcia.adv.br' },
+            { l: 'WhatsApp', v: '(62) 99999-0000' },
+          ].map((f) => (
+            <div key={f.l}>
+              <label className="text-[11px] uppercase tracking-wider" style={{ color: GOLD_SOFT }}>{f.l}</label>
+              <input defaultValue={f.v} className="w-full mt-1 px-3 py-2 rounded-md text-sm outline-none"
+                style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${LINE}`, color: CREAM }} />
+            </div>
+          ))}
+        </div>
+      </Card>
+      <Card className="p-6">
+        <div style={{ fontFamily: serif, color: 'white' }} className="text-xl mb-4">Segurança</div>
+        <button className="px-4 py-2 rounded-md text-sm" style={{ background: GOLD, color: 'white' }}>Alterar senha</button>
+        <button className="ml-3 px-4 py-2 rounded-md text-sm" style={{ border: `1px solid ${LINE}`, color: CREAM }}>Ativar 2FA</button>
+      </Card>
+      <Card className="p-6">
+        <div style={{ fontFamily: serif, color: 'white' }} className="text-xl mb-4">Preferências</div>
+        {['Receber e-mails de novos leads', 'Notificação sonora de WhatsApp', 'Modo escuro (padrão)'].map((p) => (
+          <div key={p} className="flex items-center justify-between py-2.5 border-b last:border-0" style={{ borderColor: LINE }}>
+            <span className="text-sm" style={{ color: CREAM }}>{p}</span>
+            <Toggle checked onChange={() => {}} />
+          </div>
+        ))}
+      </Card>
+    </div>
+  );
+}
+
+function AdminCases() {
+  const CASOS = [
+    { id: 'C-1042', cliente: 'Carlos Mendes', adv: 'Dra. Kênia', area: 'Trabalhista', status: 'Ativo' },
+    { id: 'C-1043', cliente: 'Ana Beatriz', adv: 'Dr. Lucas', area: 'Família', status: 'Aguardando' },
+    { id: 'C-1044', cliente: 'Roberto Souza', adv: 'Dra. Kênia', area: 'Cível', status: 'Encerrado' },
+    { id: 'C-1045', cliente: 'Helena Costa', adv: 'Dra. Marina', area: 'Trabalhista', status: 'Ativo' },
+  ];
+  return (
+    <Card className="p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div style={{ fontFamily: serif, color: 'white' }} className="text-xl">Gestão de casos (Admin)</div>
+        <button className="px-3 py-2 rounded-md text-xs flex items-center gap-2" style={{ background: GOLD, color: 'white' }}>
+          <Plus className="w-3.5 h-3.5" /> Novo caso
+        </button>
+      </div>
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-left text-[11px] uppercase tracking-wider" style={{ color: GOLD_SOFT }}>
+            <th className="py-2">ID</th><th>Cliente</th><th>Advogado</th><th>Área</th><th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {CASOS.map((c) => (
+            <tr key={c.id} className="border-t" style={{ borderColor: LINE, color: CREAM }}>
+              <td className="py-3" style={{ color: GOLD }}>{c.id}</td>
+              <td>{c.cliente}</td><td>{c.adv}</td><td>{c.area}</td>
+              <td><Pill color={c.status === 'Ativo' ? '#5ac28a' : c.status === 'Encerrado' ? GOLD_SOFT : GOLD}>{c.status}</Pill></td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Card>
+  );
+}
+
 const PANELS = {
   dashboard: Dashboard, whatsapp: WhatsApp, crm: CRM, processos: Processos,
   agenda: Agenda, financeiro: Financeiro, criativos: Criativos, metricas: Metricas,
+  chatia: ChatIA, aibuilder: AIBuilder, imagefusion: ImageFusion,
+  social: SocialConnections, settings: SettingsPanel, admincases: AdminCases,
 };
 
 export default function KeniaDashboard() {
@@ -936,7 +1178,7 @@ export default function KeniaDashboard() {
         </nav>
 
         <div className="p-3 border-t space-y-1" style={{ borderColor: LINE }}>
-          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm hover:bg-white/5" style={{ color: 'rgba(246,239,229,0.65)' }}>
+          <button onClick={() => setActive('settings')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm hover:bg-white/5" style={{ color: 'rgba(246,239,229,0.65)' }}>
             <Settings className="w-4 h-4" /> Configurações
           </button>
           <button
