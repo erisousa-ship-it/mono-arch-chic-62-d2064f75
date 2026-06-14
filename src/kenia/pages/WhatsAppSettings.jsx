@@ -661,7 +661,7 @@ export default function WhatsAppSettings() {
                       <Button variant="outline" size="sm" onClick={pollBaileys} data-testid="baileys-refresh">
                         <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Atualizar
                       </Button>
-                      {!baileysStatus?.connected && baileysStatus?.state !== "static" && HAS_BACKEND && (
+                      {!baileysStatus?.connected && baileysStatus?.state !== "static" && hasBackend() && (
                         <Button
                           variant="outline"
                           size="sm"
@@ -756,8 +756,8 @@ export default function WhatsAppSettings() {
                           variant="outline"
                           className="ml-auto h-7 text-xs"
                           onClick={async () => {
-                            if (!HAS_BACKEND || baileysStatus?.state === "static") {
-                              toast.warning("Renovar QR só funciona depois que VITE_BACKEND_URL apontar para o backend publicado.", { duration: 9000 });
+                            if (!hasBackend() || baileysStatus?.state === "static") {
+                              toast.warning("Renovar QR só funciona depois de salvar a URL do backend publicado em WhatsApp Connection.", { duration: 9000 });
                               return;
                             }
                             try {
