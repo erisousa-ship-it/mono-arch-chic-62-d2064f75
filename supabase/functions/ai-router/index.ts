@@ -10,6 +10,55 @@ const OLLAMA_URL = Deno.env.get('OLLAMA_BASE_URL');
 const OLLAMA_MODEL = Deno.env.get('OLLAMA_MODEL') || 'llama3.1';
 const LOVABLE_KEY = Deno.env.get('LOVABLE_API_KEY');
 
+function inspectPublicUrl(raw?: string | null) {
+  if (!raw) return { configured: false, is_public: false, reason: 'OLLAMA_BASE_URL não configurado' };
+  try {
+    const parsed = new URL(raw);
+    const host = parsed.hostname.replace(/^\[|\]$/g, '').toLowerCase();
+    const isHttp = parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    const parts = host.split('.').map((part) => Number(part));
+    const isIpv4 = parts.length === 4 && parts.every((part) => Number.isInteger(part) && part >= 0 && part <= 255);
+    const isLocal = ['localhost', '127.0.0.1', '0.0.0.0', '::1'].includes(host) || host.endsWith('.local');
+    const isPrivateIpv4 = isIpv4 && (
+      parts[0] === 10 ||
+      (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
+      (parts[0] === 192 && parts[1] === 168) ||
+      (parts[0] === 169 && parts[1] === 254) ||
+      (parts[0] === 100 && parts[1] >= 64 && parts[1] <= 127)
+    );
+    const isPublic = isHttp && !isLocal && !isPrivateIpv4;
+    return {
+      configured: true,
+      url: parsed.toString().replace(/\/$/, ''),
+      host,
+      protocol: parsed.protocol.replace(':', ''),
+      is_public: isPublic,
+      reason: isPublic ? 'URL pública' : (!isHttp ? 'Use http ou https' : 'URL local/privada não acessível pela edge function'),
+    };
+  } catch {
+    return { configured: true, is_public: false, reason: 'OLLAMA_BASE_URL inválida' };
+  }
+}
+
+async function pingOllamaBaseUrl() {
+  const inspection = inspectPublicUrl(OLLAMA_URL);
+  if (!inspection.configured || !inspection.is_public) throw new Error(`ollama_url_not_public: ${inspection.reason}`);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 8000);
+  const startedAt = Date.now();
+  try {
+    const r = await fetch(`${(inspection as any).url}/api/tags`, { method: 'GET', signal: controller.signal });
+    const text = await r.text().catch(() => '');
+    if (!r.ok) throw new Error(`ollama_ping_${r.status}: ${text.slice(0, 240)}`);
+    return { ...inspection, ok: true, ping_ms: Date.now() - startedAt };
+  } catch (e) {
+    if ((e as Error).name === 'AbortError') throw new Error('ollama_ping_timeout');
+    throw e;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function tryEmergentChat(messages: any[], model?: string) {
   if (!EMERGENT_KEY) throw new Error('emergent_not_configured');
   const r = await fetch(`${EMERGENT_URL.replace(/\/$/, '')}/chat/completions`, {
@@ -95,12 +144,15 @@ Deno.serve(async (req) => {
     const { mode = 'chat', prompt = '', messages, model, action } = body;
 
     if (action === 'status') {
+      const ollamaUrl = inspectPublicUrl(OLLAMA_URL);
       return Response.json({
         emergent: !!EMERGENT_KEY,
         ollama: !!OLLAMA_URL,
         lovable: !!LOVABLE_KEY,
         emergent_url: EMERGENT_URL,
         ollama_url: OLLAMA_URL || null,
+        ollama_url_public: ollamaUrl.is_public,
+        ollama_url_check: ollamaUrl,
         ollama_model: OLLAMA_MODEL,
       }, { headers: corsHeaders });
     }
@@ -110,7 +162,10 @@ Deno.serve(async (req) => {
       const out: any = { provider: target, ok: false };
       try {
         if (target === 'emergent') await tryEmergentChat([{ role: 'user', content: 'ping' }], model);
-        else if (target === 'ollama') await tryOllamaChat([{ role: 'user', content: 'ping' }], model);
+        else if (target === 'ollama') {
+          out.url_check = await pingOllamaBaseUrl();
+          await tryOllamaChat([{ role: 'user', content: 'ping' }], model);
+        }
         else if (target === 'lovable') await tryLovableChat([{ role: 'user', content: 'ping' }]);
         out.ok = true;
       } catch (e) { out.error = (e as Error).message; }
