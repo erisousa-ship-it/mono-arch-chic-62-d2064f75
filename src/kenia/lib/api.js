@@ -1285,6 +1285,8 @@ const staticDelete = (url) => {
 export const liveApi = axios.create({ baseURL: API });
 
 liveApi.interceptors.request.use((cfg) => {
+  const apiUrl = getBackendApi();
+  if (apiUrl) cfg.baseURL = apiUrl;
   const token = localStorage.getItem("lf_token");
   if (token) cfg.headers.Authorization = `Bearer ${token}`;
   const internalToken = localStorage.getItem("wa_conn_token");
@@ -1352,47 +1354,49 @@ const backendSafeGetPaths = new Set([
   "/whatsapp/qr/image",
 ]);
 
-export const api = HAS_BACKEND
-  ? {
-      get: async (url, config) => {
-        const [path] = String(url).split("?");
-        if (cloudFirstGetPaths.has(path)) return staticGet(url, config);
-        try {
-          const res = await liveApi.get(url, config);
-          if (fallbackToStaticGetPaths.has(path) && isEmptyPayload(res?.data)) {
-            return staticGet(url, config);
-          }
-          if (path === "/whatsapp/config") {
-            return { ...res, data: withCurrentBotPrompt(res?.data || {}) };
-          }
-          return res;
-        } catch (err) {
-          if (backendSafeGetPaths.has(path)) return staticGet(url, config);
-          if (fallbackToStaticGetPaths.has(path)) return staticGet(url, config);
-          throw err;
-        }
-      },
-      post: (url, body, config) => {
-        const [path] = String(url).split("?");
-        if (path.startsWith("/legal-deadlines/")) return staticPost(url, body);
-        if (cloudFirstPostPaths.has(path)) return staticPost(url, body);
-        if (path === "/chat/message") return staticPost(url, body);
-        if (liveFirstWithStaticFallbackPostPaths.has(path)) {
-          return liveApi.post(url, body, config).catch(() => staticPost(url, body));
-        }
-        if (fallbackToStaticPostPaths.has(path)) {
-          return liveApi.post(url, body, config).catch(() => staticPost(url, body));
-        }
-        return liveApi.post(url, body, config);
-      },
-      put: liveApi.put.bind(liveApi),
-      patch: (url, body, config) => String(url).split("?")[0].startsWith("/legal-deadlines/") ? staticPatch(url, body) : liveApi.patch(url, body, config),
-      delete: (url, config) => String(url).split("?")[0].startsWith("/legal-deadlines/") ? staticDelete(url) : liveApi.delete(url, config),
+export const api = {
+  get: async (url, config) => {
+    const [path] = String(url).split("?");
+    if (!getBackendApi()) return staticGet(url, config);
+    if (cloudFirstGetPaths.has(path)) return staticGet(url, config);
+    try {
+      const res = await liveApi.get(url, config);
+      if (fallbackToStaticGetPaths.has(path) && isEmptyPayload(res?.data)) {
+        return staticGet(url, config);
+      }
+      if (path === "/whatsapp/config") {
+        return { ...res, data: withCurrentBotPrompt(res?.data || {}) };
+      }
+      return res;
+    } catch (err) {
+      if (backendSafeGetPaths.has(path)) return staticGet(url, config);
+      if (fallbackToStaticGetPaths.has(path)) return staticGet(url, config);
+      throw err;
     }
-  : {
-      get: staticGet,
-      post: staticPost,
-      put: staticPut,
-      patch: staticPatch,
-      delete: staticDelete,
-    };
+  },
+  post: (url, body, config) => {
+    const [path] = String(url).split("?");
+    if (!getBackendApi()) return staticPost(url, body);
+    if (path.startsWith("/legal-deadlines/")) return staticPost(url, body);
+    if (cloudFirstPostPaths.has(path)) return staticPost(url, body);
+    if (path === "/chat/message") return staticPost(url, body);
+    if (liveFirstWithStaticFallbackPostPaths.has(path)) {
+      return liveApi.post(url, body, config).catch(() => staticPost(url, body));
+    }
+    if (fallbackToStaticPostPaths.has(path)) {
+      return liveApi.post(url, body, config).catch(() => staticPost(url, body));
+    }
+    return liveApi.post(url, body, config);
+  },
+  put: (url, body, config) => getBackendApi() ? liveApi.put(url, body, config) : staticPut(url, body),
+  patch: (url, body, config) => {
+    const path = String(url).split("?")[0];
+    if (!getBackendApi() || path.startsWith("/legal-deadlines/")) return staticPatch(url, body);
+    return liveApi.patch(url, body, config);
+  },
+  delete: (url, config) => {
+    const path = String(url).split("?")[0];
+    if (!getBackendApi() || path.startsWith("/legal-deadlines/")) return staticDelete(url);
+    return liveApi.delete(url, config);
+  },
+};
