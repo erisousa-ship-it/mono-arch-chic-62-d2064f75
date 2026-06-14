@@ -1178,7 +1178,7 @@ export default function KeniaDashboard() {
         </nav>
 
         <div className="p-3 border-t space-y-1" style={{ borderColor: LINE }}>
-          <button className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm hover:bg-white/5" style={{ color: 'rgba(246,239,229,0.65)' }}>
+          <button onClick={() => setActive('settings')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-sm hover:bg-white/5" style={{ color: 'rgba(246,239,229,0.65)' }}>
             <Settings className="w-4 h-4" /> Configurações
           </button>
           <button
