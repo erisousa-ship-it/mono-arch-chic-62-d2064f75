@@ -16,10 +16,15 @@ const readSavedBackend = () => {
   }
 };
 const ENV_BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || "").replace(/\/$/, "");
-const BACKEND_URL = ENV_BACKEND_URL || readSavedBackend();
+const getBackendUrl = () => (ENV_BACKEND_URL || readSavedBackend()).replace(/\/$/, "");
+const getBackendApi = () => {
+  const url = getBackendUrl();
+  return url ? `${url}/api` : "";
+};
+const BACKEND_URL = getBackendUrl();
 export const HAS_BACKEND = Boolean(BACKEND_URL);
-export const API = HAS_BACKEND ? `${BACKEND_URL}/api` : "";
-const DEFAULT_OLLAMA_URL = HAS_BACKEND
+export const API = getBackendApi();
+const DEFAULT_OLLAMA_URL = API
   ? `${API}/generate`
   : "https://unabashed-vertical-crispness.ngrok-free.dev/api/generate";
 const DIRECT_OLLAMA_URL = (
