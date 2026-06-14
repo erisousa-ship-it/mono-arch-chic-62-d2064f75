@@ -12,8 +12,10 @@ ENV VITE_SUPABASE_URL=$VITE_SUPABASE_URL \
     VITE_SUPABASE_PROJECT_ID=$VITE_SUPABASE_PROJECT_ID \
     VITE_GOOGLE_MAPS_API_KEY=$VITE_GOOGLE_MAPS_API_KEY
 
-COPY package.json package-lock.json* bun.lockb* ./
-RUN if [ -f package-lock.json ]; then npm ci; else npm install; fi
+COPY package.json package-lock.json* bun.lock* bun.lockb* ./
+# Usa npm install (não ci) para tolerar lockfile desatualizado, e --legacy-peer-deps
+# para evitar conflitos de peerDeps comuns no ecossistema shadcn/radix.
+RUN npm install --no-audit --no-fund --legacy-peer-deps
 
 COPY . .
 RUN npm run build
