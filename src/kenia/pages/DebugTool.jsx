@@ -10,7 +10,7 @@ import { Label } from "@/kenia/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/kenia/components/ui/tabs";
 import { Badge } from "@/kenia/components/ui/badge";
 import { toast } from "sonner";
-import { AlertTriangle, ImagePlus, Wand2, Send, Trash2, X, Download, Paperclip } from "lucide-react";
+import { AlertTriangle, ImagePlus, Wand2, Send, Trash2, X, Download, Paperclip, Activity, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 
 const DEBUG_BUCKET = "debug-uploads";
 
@@ -30,6 +30,45 @@ export default function DebugTool() {
   const [attachments, setAttachments] = useState([]);
   const [uploadingAttach, setUploadingAttach] = useState(false);
   const attachInputRef = useRef(null);
+
+  const [aiStatus, setAiStatus] = useState(null);
+  const [aiTesting, setAiTesting] = useState({});
+  const [aiResults, setAiResults] = useState({});
+  const [aiLoadingStatus, setAiLoadingStatus] = useState(false);
+
+  const callAiRouter = async (body) => {
+    const { data, error } = await supabase.functions.invoke("ai-router", { body });
+    if (error) throw error;
+    return data;
+  };
+
+  const refreshAiStatus = async () => {
+    setAiLoadingStatus(true);
+    try {
+      const data = await callAiRouter({ action: "status" });
+      setAiStatus(data);
+    } catch (e) {
+      setAiStatus({ error: e?.message || String(e) });
+    } finally {
+      setAiLoadingStatus(false);
+    }
+  };
+
+  const testAiProvider = async (provider) => {
+    setAiTesting((p) => ({ ...p, [provider]: true }));
+    try {
+      const data = await callAiRouter({ action: "test", provider });
+      setAiResults((p) => ({ ...p, [provider]: data }));
+      if (data?.ok) toast.success(`${provider} OK`);
+      else toast.error(`${provider}: ${data?.error || "falhou"}`);
+    } catch (e) {
+      const msg = e?.message || String(e);
+      setAiResults((p) => ({ ...p, [provider]: { ok: false, error: msg } }));
+      toast.error(`${provider}: ${msg}`);
+    } finally {
+      setAiTesting((p) => ({ ...p, [provider]: false }));
+    }
+  };
 
   useEffect(() => { loadHistory(); }, []);
 
@@ -223,9 +262,10 @@ export default function DebugTool() {
       <div className="flex-1 overflow-auto p-6">
         <Card className="max-w-3xl mx-auto p-6 border-nude-200">
           <Tabs defaultValue="instruction">
-            <TabsList className="grid grid-cols-2 w-full max-w-sm">
+            <TabsList className="grid grid-cols-3 w-full max-w-md">
               <TabsTrigger value="instruction" data-testid="dbg-tab-instr">Instrução</TabsTrigger>
               <TabsTrigger value="merge" data-testid="dbg-tab-merge">Mesclar Imagens</TabsTrigger>
+              <TabsTrigger value="ai" data-testid="dbg-tab-ai" onClick={() => { if (!aiStatus) refreshAiStatus(); }}>Status IA</TabsTrigger>
             </TabsList>
 
             <TabsContent value="instruction" className="mt-6">
@@ -374,6 +414,8 @@ export default function DebugTool() {
               )}
             </TabsContent>
           </Tabs>
+
+          <Tabs value="ai-extra" className="hidden" />
         </Card>
       </div>
     </div>
