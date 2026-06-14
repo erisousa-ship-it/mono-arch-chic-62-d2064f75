@@ -7,6 +7,7 @@ const corsHeaders = {
 const EMERGENT_KEY = Deno.env.get('EMERGENT_API_KEY');
 const EMERGENT_URL = Deno.env.get('EMERGENT_BASE_URL') || 'https://api.emergent.sh/v1';
 const OLLAMA_URL = Deno.env.get('OLLAMA_BASE_URL');
+const OLLAMA_MODEL = Deno.env.get('OLLAMA_MODEL') || 'llama3.1';
 const LOVABLE_KEY = Deno.env.get('LOVABLE_API_KEY');
 
 async function tryEmergentChat(messages: any[], model?: string) {
@@ -26,7 +27,7 @@ async function tryOllamaChat(messages: any[], model?: string) {
   const r = await fetch(`${OLLAMA_URL.replace(/\/$/, '')}/api/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model: model || 'llama3.1', messages, stream: false }),
+    body: JSON.stringify({ model: model || OLLAMA_MODEL, messages, stream: false }),
   });
   if (!r.ok) throw new Error(`ollama_chat_${r.status}: ${await r.text()}`);
   const j = await r.json();
@@ -100,6 +101,7 @@ Deno.serve(async (req) => {
         lovable: !!LOVABLE_KEY,
         emergent_url: EMERGENT_URL,
         ollama_url: OLLAMA_URL || null,
+        ollama_model: OLLAMA_MODEL,
       }, { headers: corsHeaders });
     }
 
