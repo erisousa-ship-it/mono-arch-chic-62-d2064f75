@@ -16,6 +16,7 @@ const AUTH_DIR = process.env.AUTH_DIR || "./auth_session";
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "https://bcafttsxvperfslgjphb.supabase.co";
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
 const AI_ROUTER_URL = (process.env.AI_ROUTER_URL || `${SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/ai-router`).replace(/\/+$/, "");
+const OLLAMA_BASE_URL = (process.env.OLLAMA_BASE_URL || process.env.OLLAMA_URL || "").replace(/\/+$/, "");
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen2.5:3b-instruct";
 
 const DEFAULT_BOT_PROMPT = `Você é a secretária jurídica da Dra. Kênia Garcia atendendo pelo WhatsApp.
@@ -107,6 +108,16 @@ async function generateAiReply(jid, text) {
     { role: "system", content: state.config.bot_prompt || DEFAULT_BOT_PROMPT },
     ...history,
   ];
+
+  const directReply = await generateDirectOllamaReply(messages).catch((e) => {
+    state.lastAiError = e.message;
+    return null;
+  });
+  if (directReply) {
+    rememberMessage(jid, "assistant", directReply);
+    state.lastAiError = null;
+    return directReply;
+  }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 25000);
