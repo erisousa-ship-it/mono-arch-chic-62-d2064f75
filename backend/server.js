@@ -16,6 +16,7 @@ const AUTH_DIR = process.env.AUTH_DIR || "./auth_session";
 const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "https://bcafttsxvperfslgjphb.supabase.co";
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
 const AI_ROUTER_URL = (process.env.AI_ROUTER_URL || `${SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/ai-router`).replace(/\/+$/, "");
+const OLLAMA_BASE_URL = (process.env.OLLAMA_BASE_URL || process.env.OLLAMA_URL || "").replace(/\/+$/, "");
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen2.5:3b-instruct";
 
 const DEFAULT_BOT_PROMPT = `Você é a secretária jurídica da Dra. Kênia Garcia atendendo pelo WhatsApp.
@@ -101,12 +102,46 @@ const rememberMessage = (jid, role, content) => {
   return conversationHistory.get(jid);
 };
 
+async function generateDirectOllamaReply(messages) {
+  if (!OLLAMA_BASE_URL) throw new Error("OLLAMA_BASE_URL não configurado no backend WhatsApp");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 45000);
+  try {
+    const r = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
+      signal: controller.signal,
+      body: JSON.stringify({ model: OLLAMA_MODEL, messages, stream: false, options: { temperature: 0.2, num_predict: 220 } }),
+    });
+    const raw = await r.text();
+    if (!r.ok) throw new Error(`ollama_${r.status}: ${raw.slice(0, 300)}`);
+    const data = JSON.parse(raw || "{}");
+    const reply = String(data.message?.content || data.response || "").trim();
+    if (!reply) throw new Error("ollama_empty_response");
+    return reply;
+  } catch (e) {
+    throw new Error(e?.name === "AbortError" ? "ollama_timeout" : e.message);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function generateAiReply(jid, text) {
   const history = rememberMessage(jid, "user", text);
   const messages = [
     { role: "system", content: state.config.bot_prompt || DEFAULT_BOT_PROMPT },
     ...history,
   ];
+
+  const directReply = await generateDirectOllamaReply(messages).catch((e) => {
+    state.lastAiError = e.message;
+    return null;
+  });
+  if (directReply) {
+    rememberMessage(jid, "assistant", directReply);
+    state.lastAiError = null;
+    return directReply;
+  }
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 25000);
@@ -157,6 +192,9 @@ async function handleIncomingMessage(msg) {
   } catch (e) {
     state.lastAiError = e.message;
     console.error("auto reply failed", e);
+    try {
+      await state.sock?.sendMessage(jid, { text: "Tive uma instabilidade momentânea no atendimento. Pode me enviar sua mensagem novamente, por favor?" }, { quoted: msg });
+    } catch {}
   } finally {
     try { await state.sock?.sendPresenceUpdate?.("paused", jid); } catch {}
   }
@@ -252,7 +290,7 @@ app.put("/api/whatsapp/config", auth, (req, res) => {
 app.get("/api/whatsapp/diagnostics", auth, (_req, res) => {
   res.json({ ok: true, static_mode: false, checks: [
     { id: "baileys-backend", ok: true, label: "Backend Baileys ativo", msg: "Serviço WhatsApp publicado e respondendo.", hint: state.connected ? "WhatsApp conectado." : state.qrDataUrl ? "QR Code disponível para leitura." : "Se ficar inicializando por mais de 30s, gere uma nova sessão." },
-    { id: "ai-router", ok: !state.lastAiError, label: "Resposta automática IA", msg: state.lastAiError ? `Última falha: ${state.lastAiError}` : "Fluxo automático ligado ao ai-router/Ollama.", hint: state.lastAutoReplyAt ? `Última resposta enviada: ${new Date(state.lastAutoReplyAt).toLocaleString("pt-BR")}` : "Envie uma mensagem para este WhatsApp para testar a resposta automática." },
+    { id: "ollama", ok: !state.lastAiError && (!!OLLAMA_BASE_URL || !!AI_ROUTER_URL), label: "Resposta automática IA", msg: state.lastAiError ? `Última falha: ${state.lastAiError}` : (OLLAMA_BASE_URL ? "Backend ligado direto ao Ollama." : "Backend ligado ao ai-router/Ollama."), hint: state.lastAutoReplyAt ? `Última resposta enviada: ${new Date(state.lastAutoReplyAt).toLocaleString("pt-BR")}` : "Envie uma mensagem para este WhatsApp para testar a resposta automática." },
   ] });
 });
 
@@ -270,6 +308,7 @@ app.get("/api/whatsapp/baileys/status", auth, (_req, res) => {
     secondsWaiting,
     last_error: state.lastError,
     bot_enabled: !!state.config.bot_enabled,
+    ollama_base_url_configured: !!OLLAMA_BASE_URL,
     ai_router_url: AI_ROUTER_URL,
     ollama_model: OLLAMA_MODEL,
     last_ai_error: state.lastAiError,
