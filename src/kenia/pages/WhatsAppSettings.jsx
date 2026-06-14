@@ -665,16 +665,26 @@ export default function WhatsAppSettings() {
                           <AlertTriangle className="w-4 h-4" />
                           Serviço externo indisponível
                         </div>
+                      ) : baileysStatus?.state === "timeout" ? (
+                        <div className="flex items-center gap-2 text-gold-700 font-medium">
+                          <AlertTriangle className="w-4 h-4" />
+                          QR não foi gerado
+                        </div>
+                      ) : baileysStatus?.state === "qr" || baileysQr?.qr ? (
+                        <div className="flex items-center gap-2 text-gold-700 font-medium">
+                          <QrCode className="w-4 h-4" />
+                          QR pronto para escanear
+                        </div>
                       ) : (
                         <div className="flex items-center gap-2 text-gold-700 font-medium">
                           <Loader2 className="w-4 h-4 animate-spin" />
-                          {baileysStatus?.state === "connecting" ? "Aguardando leitura do QR..." : "Inicializando..."}
+                          {baileysStatus?.state === "connecting" ? "Gerando QR Code..." : "Inicializando..."}
                         </div>
                       )}
                       <div className="text-xs text-nude-500 mt-1">
                         Estado: <code className="bg-white px-1.5 py-0.5 rounded text-[11px]">{baileysStatus?.state || "—"}</code>
                       </div>
-                      {baileysStatus?.last_error && (baileysStatus?.state === "conflicted" || baileysStatus?.state === "offline" || baileysStatus?.state === "static") && (
+                      {baileysStatus?.last_error && (baileysStatus?.state === "conflicted" || baileysStatus?.state === "offline" || baileysStatus?.state === "static" || baileysStatus?.state === "timeout") && (
                         <div className="text-xs text-gold-800 mt-2 p-2 bg-gold-50 border border-gold-200 rounded" data-testid="baileys-conflict-msg">
                           ⚠️ {baileysStatus.last_error}
                         </div>
