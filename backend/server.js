@@ -109,7 +109,7 @@ async function generateDirectOllamaReply(messages) {
   try {
     const r = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
       signal: controller.signal,
       body: JSON.stringify({ model: OLLAMA_MODEL, messages, stream: false, options: { temperature: 0.2, num_predict: 220 } }),
     });
@@ -192,6 +192,9 @@ async function handleIncomingMessage(msg) {
   } catch (e) {
     state.lastAiError = e.message;
     console.error("auto reply failed", e);
+    try {
+      await state.sock?.sendMessage(jid, { text: "Tive uma instabilidade momentânea no atendimento. Pode me enviar sua mensagem novamente, por favor?" }, { quoted: msg });
+    } catch {}
   } finally {
     try { await state.sock?.sendPresenceUpdate?.("paused", jid); } catch {}
   }
