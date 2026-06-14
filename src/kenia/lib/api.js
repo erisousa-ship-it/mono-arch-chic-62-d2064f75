@@ -1284,6 +1284,11 @@ const staticDelete = (url) => {
 
 export const liveApi = axios.create({ baseURL: API });
 
+const liveRequest = (method, url, ...args) => {
+  const baseURL = getBackendUrl() ? `${getBackendUrl()}/api` : API;
+  return liveApi.request({ method, url, baseURL, ...(method === "get" || method === "delete" ? { ...(args[0] || {}) } : { data: args[0], ...(args[1] || {}) }) });
+};
+
 liveApi.interceptors.request.use((cfg) => {
   const token = localStorage.getItem("lf_token");
   if (token) cfg.headers.Authorization = `Bearer ${token}`;
@@ -1388,9 +1393,33 @@ export const api = HAS_BACKEND
       delete: (url, config) => String(url).split("?")[0].startsWith("/legal-deadlines/") ? staticDelete(url) : liveApi.delete(url, config),
     }
   : {
-      get: staticGet,
-      post: staticPost,
-      put: staticPut,
+      get: async (url, config) => {
+        const [path] = String(url).split("?");
+        if (hasBackend() && (backendSafeGetPaths.has(path) || path === "/whatsapp/config")) {
+          try {
+            const res = await liveRequest("get", url, config);
+            if (path === "/whatsapp/config") return { ...res, data: withCurrentBotPrompt(res?.data || {}) };
+            return res;
+          } catch {
+            return staticGet(url, config);
+          }
+        }
+        return staticGet(url, config);
+      },
+      post: (url, body, config) => {
+        const [path] = String(url).split("?");
+        if (hasBackend() && (path.startsWith("/whatsapp/") || fallbackToStaticPostPaths.has(path))) {
+          return liveRequest("post", url, body, config).catch(() => staticPost(url, body));
+        }
+        return staticPost(url, body);
+      },
+      put: (url, body, config) => {
+        const [path] = String(url).split("?");
+        if (hasBackend() && path === "/whatsapp/config") {
+          return liveRequest("put", url, body, config).catch(() => staticPut(url, body));
+        }
+        return staticPut(url, body);
+      },
       patch: staticPatch,
       delete: staticDelete,
     };
