@@ -414,8 +414,6 @@ export default function DebugTool() {
               )}
             </TabsContent>
           </Tabs>
-
-          <Tabs value="ai-extra" className="hidden" />
         </Card>
       </div>
     </div>
