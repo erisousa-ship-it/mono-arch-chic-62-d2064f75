@@ -8,8 +8,6 @@ const EMERGENT_KEY = Deno.env.get('EMERGENT_API_KEY');
 const EMERGENT_URL = Deno.env.get('EMERGENT_BASE_URL') || 'https://api.emergent.sh/v1';
 const OLLAMA_URL = Deno.env.get('OLLAMA_BASE_URL');
 const LOVABLE_KEY = Deno.env.get('LOVABLE_API_KEY');
-const OLLAMA_HEADERS = { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' };
-const OLLAMA_FALLBACK_URL = 'https://unabashed-vertical-crispness.ngrok-free.dev';
 
 async function tryEmergentChat(messages: any[], model?: string) {
   if (!EMERGENT_KEY) throw new Error('emergent_not_configured');
@@ -24,29 +22,22 @@ async function tryEmergentChat(messages: any[], model?: string) {
 }
 
 async function tryOllamaChat(messages: any[], model?: string) {
-  const bases = Array.from(new Set([OLLAMA_URL, OLLAMA_FALLBACK_URL].filter(Boolean) as string[]));
-  if (bases.length === 0) throw new Error('ollama_not_configured');
-  const errors: string[] = [];
-  for (const base of bases) {
-    try {
-      const r = await fetch(`${base.replace(/\/$/, '')}/api/chat`, {
-        method: 'POST',
-        headers: OLLAMA_HEADERS,
-        body: JSON.stringify({ model: model || 'qwen2.5:3b-instruct', messages, stream: false }),
-      });
-      if (!r.ok) throw new Error(`ollama_chat_${r.status}: ${await r.text()}`);
-      const j = await r.json();
-      return { provider: 'ollama', text: j.message?.content ?? '', ollama_url: base };
-    } catch (e) { errors.push(`${base}: ${(e as Error).message}`); }
-  }
-  throw new Error(errors.join(' | '));
+  if (!OLLAMA_URL) throw new Error('ollama_not_configured');
+  const r = await fetch(`${OLLAMA_URL.replace(/\/$/, '')}/api/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: model || 'llama3.1', messages, stream: false }),
+  });
+  if (!r.ok) throw new Error(`ollama_chat_${r.status}: ${await r.text()}`);
+  const j = await r.json();
+  return { provider: 'ollama', text: j.message?.content ?? '' };
 }
 
 async function tryLovableChat(messages: any[]) {
   if (!LOVABLE_KEY) throw new Error('lovable_not_configured');
   const r = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Lovable-API-Key': LOVABLE_KEY },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${LOVABLE_KEY}` },
     body: JSON.stringify({ model: 'google/gemini-3-flash-preview', messages }),
   });
   if (!r.ok) throw new Error(`lovable_chat_${r.status}: ${await r.text()}`);
@@ -72,7 +63,7 @@ async function tryLovableImage(prompt: string) {
   if (!LOVABLE_KEY) throw new Error('lovable_not_configured');
   const r = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Lovable-API-Key': LOVABLE_KEY },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${LOVABLE_KEY}` },
     body: JSON.stringify({
       model: 'google/gemini-2.5-flash-image',
       messages: [{ role: 'user', content: prompt }],
@@ -100,7 +91,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { mode = 'chat', prompt = '', messages, model, action, provider } = body;
+    const { mode = 'chat', prompt = '', messages, model, action } = body;
 
     if (action === 'status') {
       return Response.json({
@@ -109,7 +100,6 @@ Deno.serve(async (req) => {
         lovable: !!LOVABLE_KEY,
         emergent_url: EMERGENT_URL,
         ollama_url: OLLAMA_URL || null,
-        ollama_fallback_url: OLLAMA_FALLBACK_URL,
       }, { headers: corsHeaders });
     }
 
@@ -118,7 +108,7 @@ Deno.serve(async (req) => {
       const out: any = { provider: target, ok: false };
       try {
         if (target === 'emergent') await tryEmergentChat([{ role: 'user', content: 'ping' }], model);
-        else if (target === 'ollama') Object.assign(out, await tryOllamaChat([{ role: 'user', content: 'Responda apenas: ok ollama' }], model));
+        else if (target === 'ollama') await tryOllamaChat([{ role: 'user', content: 'ping' }], model);
         else if (target === 'lovable') await tryLovableChat([{ role: 'user', content: 'ping' }]);
         out.ok = true;
       } catch (e) { out.error = (e as Error).message; }
@@ -134,10 +124,11 @@ Deno.serve(async (req) => {
     }
 
     const msgs = messages ?? [{ role: 'user', content: prompt }];
-    const orderedProviders = provider === 'ollama'
-      ? [() => tryOllamaChat(msgs, model), () => tryEmergentChat(msgs, model), () => tryLovableChat(msgs)]
-      : [() => tryEmergentChat(msgs, model), () => tryOllamaChat(msgs, model), () => tryLovableChat(msgs)];
-    const result = await runChain(orderedProviders);
+    const result = await runChain([
+      () => tryEmergentChat(msgs, model),
+      () => tryOllamaChat(msgs, model),
+      () => tryLovableChat(msgs),
+    ]);
     return Response.json(result, { headers: corsHeaders });
   } catch (e) {
     return new Response(JSON.stringify({ error: (e as Error).message }), {
