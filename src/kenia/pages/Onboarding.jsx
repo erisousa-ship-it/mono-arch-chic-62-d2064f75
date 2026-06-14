@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import QRCode from "qrcode";
 import { api, DEFAULT_PROMPT } from "@/kenia/lib/api";
 import { Card } from "@/kenia/components/ui/card";
 import { Button } from "@/kenia/components/ui/button";
@@ -15,6 +16,35 @@ import {
   Scale, ArrowRight, ArrowLeft, CheckCircle2, Zap,
   Building2, MessageSquare, Sparkles, Loader2, QrCode,
 } from "lucide-react";
+
+const normalizeQrImage = async (raw, blockedValues = []) => {
+  if (!raw || typeof raw !== "string") return null;
+  const s = raw.trim();
+  if (!s || blockedValues.includes(s)) return null;
+  if (s.startsWith("data:image") || /^https?:\/\//i.test(s)) return s;
+  if (s.startsWith("<svg")) return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(s)}`;
+  if (/^iVBOR[A-Za-z0-9+/=\s]+$/.test(s.slice(0, 60))) return `data:image/png;base64,${s.replace(/\s/g, "")}`;
+  if (/^\/9j\/[A-Za-z0-9+/=\s]+$/.test(s.slice(0, 60))) return `data:image/jpeg;base64,${s.replace(/\s/g, "")}`;
+  if (/^PHN2Zy[A-Za-z0-9+/=\s]+$/.test(s.slice(0, 80))) return `data:image/svg+xml;base64,${s.replace(/\s/g, "")}`;
+
+  const looksLikeWhatsAppPairingPayload = s.length >= 80 && (/^\d@/.test(s) || (s.includes("@") && s.includes(",")));
+  if (!looksLikeWhatsAppPairingPayload) return null;
+
+  return QRCode.toDataURL(s, { type: "image/png", width: 320, margin: 2, errorCorrectionLevel: "M" });
+};
+
+const pickQrImage = async (data, blockedValues = []) => {
+  const candidates = [
+    data?.qr, data?.qrcode, data?.qrCode, data?.image, data?.base64, data?.png, data?.dataURL,
+    data?.data?.value, data?.data?.qrcode, data?.data?.qrCode, data?.data?.qr, data?.data?.image, data?.data?.base64,
+    typeof data === "string" ? data : null,
+  ];
+  for (const candidate of candidates) {
+    const image = await normalizeQrImage(candidate, blockedValues);
+    if (image) return image;
+  }
+  return null;
+};
 
 export default function Onboarding() {
   const [step, setStep] = useState(1);
@@ -33,14 +63,27 @@ export default function Onboarding() {
   const [connected, setConnected] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  const applyQrResponse = (qrData = {}) => {
-    const qr = qrData?.qr || qrData?.data?.value || qrData?.data?.qrcode || qrData?.data?.qr;
+  const applyQrResponse = async (qrData = {}) => {
+    const qr = await pickQrImage(qrData, [zapi.zapi_instance_id, zapi.zapi_instance_token, zapi.zapi_client_token].filter(Boolean));
     if (qr) setQrImg(qr);
     if (qrData?.connected) {
       setConnected(true);
       setQrImg(null);
     }
     return Boolean(qr || qrData?.connected);
+  };
+
+  const fetchAnyQr = async () => {
+    try {
+      const { data: baileysQr } = await api.get("/whatsapp/baileys/qr");
+      if (await applyQrResponse(baileysQr)) return true;
+    } catch {}
+    try {
+      const { data: qrData } = await api.get("/whatsapp/qr");
+      return applyQrResponse(qrData);
+    } catch {
+      return false;
+    }
   };
 
   useEffect(() => {
@@ -65,8 +108,7 @@ export default function Onboarding() {
           setQrImg(null);
           return;
         }
-        const { data: qrData } = await api.get("/whatsapp/qr");
-        applyQrResponse(qrData);
+        await fetchAnyQr();
       } catch {}
     };
     refreshQr();
@@ -91,8 +133,8 @@ export default function Onboarding() {
         bot_enabled: true, bot_prompt: data.bot_prompt,
       });
       toast.success("Configuração WhatsApp salva");
-      const { data: qrData } = await api.get("/whatsapp/qr");
-      if (!applyQrResponse(qrData)) toast.info("Aguardando o QR Code do WhatsApp...");
+      await api.post("/whatsapp/baileys/reconnect").catch(() => api.post("/whatsapp/baileys/restart").catch(() => null));
+      if (!(await fetchAnyQr())) toast.info("Aguardando o QR Code do WhatsApp...");
     } catch {
       toast.error("Erro ao salvar WhatsApp");
     } finally {

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
+import QRCode from "qrcode";
 import { Card } from "@/kenia/components/ui/card";
 import { Button } from "@/kenia/components/ui/button";
 import { Input } from "@/kenia/components/ui/input";
@@ -18,7 +19,34 @@ const EP_QR = "/api/whatsapp/qr";
 const EP_RESTART = "/api/whatsapp/baileys/restart";
 const EP_LOGOUT = "/api/whatsapp/logout";
 
-const DEFAULT_BASE = import.meta.env.VITE_BACKEND_URL || "";
+const DEFAULT_BASE = (import.meta.env.VITE_BACKEND_URL || "").replace(/\/api\/?$/, "");
+
+const normalizeQrImage = async (raw) => {
+  if (!raw || typeof raw !== "string") return null;
+  const s = raw.trim();
+  if (s.startsWith("data:image") || /^https?:\/\//i.test(s)) return s;
+  if (s.startsWith("<svg")) return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(s)}`;
+  if (/^iVBOR[A-Za-z0-9+/=\s]+$/.test(s.slice(0, 60))) return `data:image/png;base64,${s.replace(/\s/g, "")}`;
+  if (/^\/9j\/[A-Za-z0-9+/=\s]+$/.test(s.slice(0, 60))) return `data:image/jpeg;base64,${s.replace(/\s/g, "")}`;
+  if (/^PHN2Zy[A-Za-z0-9+/=\s]+$/.test(s.slice(0, 80))) return `data:image/svg+xml;base64,${s.replace(/\s/g, "")}`;
+  if (s.length >= 80 && (/^\d@/.test(s) || (s.includes("@") && s.includes(",")))) {
+    return QRCode.toDataURL(s, { type: "image/png", width: 320, margin: 2, errorCorrectionLevel: "M" });
+  }
+  return null;
+};
+
+const pickQrImage = async (data) => {
+  const candidates = [
+    data?.qr, data?.qrcode, data?.qrCode, data?.image, data?.base64, data?.png, data?.dataURL,
+    data?.data?.value, data?.data?.qrcode, data?.data?.qrCode, data?.data?.qr, data?.data?.image, data?.data?.base64,
+    typeof data === "string" ? data : null,
+  ];
+  for (const candidate of candidates) {
+    const image = await normalizeQrImage(candidate);
+    if (image) return image;
+  }
+  return null;
+};
 
 export default function WhatsAppConnection() {
   const [baseUrl, setBaseUrl] = useState(() => localStorage.getItem(LS_BASE) || DEFAULT_BASE);
@@ -39,7 +67,8 @@ export default function WhatsAppConnection() {
   const callApi = useCallback(
     async (path, method = "GET") => {
       if (!baseUrl) throw new Error("Configure a URL base do backend.");
-      const url = `${baseUrl.replace(/\/$/, "")}${path}`;
+      const cleanBase = baseUrl.trim().replace(/\/+$/, "").replace(/\/api$/, "");
+      const url = `${cleanBase}${path}`;
       const res = await fetch(url, { method, headers: headers() });
       const ct = res.headers.get("content-type") || "";
       const raw = ct.includes("application/json") ? await res.json() : await res.text();
@@ -69,7 +98,7 @@ export default function WhatsAppConnection() {
   const fetchQr = useCallback(async () => {
     try {
       const data = await callApi(EP_QR, "GET");
-      const qrVal = data?.qr || data?.dataURL || null;
+      const qrVal = await pickQrImage(data);
       if (qrVal) setQr(qrVal);
       return { qr: qrVal };
     } catch {
