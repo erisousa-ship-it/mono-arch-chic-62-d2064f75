@@ -446,6 +446,28 @@ export default function DebugTool() {
                 </Button>
               </div>
 
+              <div className="mb-4 p-3 border border-nude-200 rounded bg-white">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="text-sm font-semibold">WhatsApp automático + Ollama</div>
+                    <div className="text-xs text-nude-500 truncate">{WHATSAPP_BACKEND_URL}/api/ai/ping</div>
+                  </div>
+                  <Button size="sm" variant="outline" disabled={whatsappAiTesting} onClick={testWhatsappOllama}>
+                    {whatsappAiTesting ? <Loader2 className="w-4 h-4 animate-spin" /> : "Ping"}
+                  </Button>
+                </div>
+                {whatsappAiPing && (
+                  <div className={`text-xs mt-2 ${whatsappAiPing.chat_ok ? "text-emerald-700" : "text-rose-600"}`}>
+                    {whatsappAiPing.chat_ok
+                      ? `OK: ${whatsappAiPing.ollama_model} respondeu`
+                      : `Erro: ${whatsappAiPing.error || "sem resposta"}`}
+                    <div className="text-nude-500 mt-1">
+                      URL pública: {whatsappAiPing.is_public ? "sim" : "não"} · Tags: {whatsappAiPing.tags_status || "—"}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               {aiStatus?.error && (
                 <div className="mb-4 p-3 rounded border border-rose-300 bg-rose-50 text-sm text-rose-700">
                   Falha ao consultar ai-router: {aiStatus.error}
