@@ -1290,6 +1290,7 @@ const liveRequest = (method, url, ...args) => {
 };
 
 liveApi.interceptors.request.use((cfg) => {
+  cfg.headers = cfg.headers || {};
   const token = localStorage.getItem("lf_token");
   if (token) cfg.headers.Authorization = `Bearer ${token}`;
   const whatsappToken = localStorage.getItem("wa_conn_token");
