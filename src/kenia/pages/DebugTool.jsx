@@ -10,7 +10,7 @@ import { Label } from "@/kenia/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/kenia/components/ui/tabs";
 import { Badge } from "@/kenia/components/ui/badge";
 import { toast } from "sonner";
-import { AlertTriangle, ImagePlus, Wand2, Send, Trash2, X, Download, Paperclip } from "lucide-react";
+import { AlertTriangle, ImagePlus, Wand2, Send, Trash2, X, Download, Paperclip, Activity, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 
 const DEBUG_BUCKET = "debug-uploads";
 
@@ -30,6 +30,45 @@ export default function DebugTool() {
   const [attachments, setAttachments] = useState([]);
   const [uploadingAttach, setUploadingAttach] = useState(false);
   const attachInputRef = useRef(null);
+
+  const [aiStatus, setAiStatus] = useState(null);
+  const [aiTesting, setAiTesting] = useState({});
+  const [aiResults, setAiResults] = useState({});
+  const [aiLoadingStatus, setAiLoadingStatus] = useState(false);
+
+  const callAiRouter = async (body) => {
+    const { data, error } = await supabase.functions.invoke("ai-router", { body });
+    if (error) throw error;
+    return data;
+  };
+
+  const refreshAiStatus = async () => {
+    setAiLoadingStatus(true);
+    try {
+      const data = await callAiRouter({ action: "status" });
+      setAiStatus(data);
+    } catch (e) {
+      setAiStatus({ error: e?.message || String(e) });
+    } finally {
+      setAiLoadingStatus(false);
+    }
+  };
+
+  const testAiProvider = async (provider) => {
+    setAiTesting((p) => ({ ...p, [provider]: true }));
+    try {
+      const data = await callAiRouter({ action: "test", provider });
+      setAiResults((p) => ({ ...p, [provider]: data }));
+      if (data?.ok) toast.success(`${provider} OK`);
+      else toast.error(`${provider}: ${data?.error || "falhou"}`);
+    } catch (e) {
+      const msg = e?.message || String(e);
+      setAiResults((p) => ({ ...p, [provider]: { ok: false, error: msg } }));
+      toast.error(`${provider}: ${msg}`);
+    } finally {
+      setAiTesting((p) => ({ ...p, [provider]: false }));
+    }
+  };
 
   useEffect(() => { loadHistory(); }, []);
 
@@ -223,9 +262,10 @@ export default function DebugTool() {
       <div className="flex-1 overflow-auto p-6">
         <Card className="max-w-3xl mx-auto p-6 border-nude-200">
           <Tabs defaultValue="instruction">
-            <TabsList className="grid grid-cols-2 w-full max-w-sm">
+            <TabsList className="grid grid-cols-3 w-full max-w-md">
               <TabsTrigger value="instruction" data-testid="dbg-tab-instr">Instrução</TabsTrigger>
               <TabsTrigger value="merge" data-testid="dbg-tab-merge">Mesclar Imagens</TabsTrigger>
+              <TabsTrigger value="ai" data-testid="dbg-tab-ai" onClick={() => { if (!aiStatus) refreshAiStatus(); }}>Status IA</TabsTrigger>
             </TabsList>
 
             <TabsContent value="instruction" className="mt-6">
@@ -372,6 +412,71 @@ export default function DebugTool() {
                   </div>
                 </div>
               )}
+            </TabsContent>
+
+            <TabsContent value="ai" className="mt-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <div className="text-sm font-semibold">Provedores de IA (ai-router)</div>
+                  <div className="text-xs text-nude-500">Verifica se Emergent, Ollama e Lovable estão configurados e respondendo.</div>
+                </div>
+                <Button size="sm" variant="outline" onClick={refreshAiStatus} disabled={aiLoadingStatus}>
+                  {aiLoadingStatus ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Activity className="w-4 h-4 mr-2" />}
+                  Recarregar
+                </Button>
+              </div>
+
+              {aiStatus?.error && (
+                <div className="mb-4 p-3 rounded border border-rose-300 bg-rose-50 text-sm text-rose-700">
+                  Falha ao consultar ai-router: {aiStatus.error}
+                  <div className="text-xs mt-1">Verifique se a edge function <code>ai-router</code> foi deployada.</div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                {["emergent", "ollama", "lovable"].map((p) => {
+                  const configured = aiStatus && aiStatus[p];
+                  const url = aiStatus?.[`${p}_url`];
+                  const result = aiResults[p];
+                  return (
+                    <div key={p} className="flex items-center justify-between gap-3 p-3 border border-nude-200 rounded bg-white">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {configured == null ? (
+                          <Loader2 className="w-5 h-5 text-nude-400" />
+                        ) : configured ? (
+                          <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                        ) : (
+                          <XCircle className="w-5 h-5 text-rose-500" />
+                        )}
+                        <div className="min-w-0">
+                          <div className="font-medium capitalize">{p}</div>
+                          <div className="text-xs text-nude-500 truncate">
+                            {configured == null ? "—" : configured ? (url || "configurado") : "não configurado"}
+                          </div>
+                          {result && (
+                            <div className={`text-xs mt-1 ${result.ok ? "text-emerald-700" : "text-rose-600"}`}>
+                              {result.ok ? "Ping OK" : `Erro: ${result.error}`}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <Button size="sm" variant="outline" disabled={!configured || aiTesting[p]} onClick={() => testAiProvider(p)}>
+                        {aiTesting[p] ? <Loader2 className="w-4 h-4 animate-spin" /> : "Testar"}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-6 text-xs text-nude-500 space-y-1">
+                <div className="font-semibold text-nude-700">Como configurar Ollama:</div>
+                <ol className="list-decimal pl-5 space-y-1">
+                  <li>No seu PC: <code>ollama serve</code> e <code>ollama pull llama3.1</code></li>
+                  <li>Exponha com ngrok: <code>ngrok http 11434</code></li>
+                  <li>Atualize o secret <code>OLLAMA_BASE_URL</code> com a URL do ngrok</li>
+                  <li>Clique em "Testar" — deve retornar Ping OK.</li>
+                </ol>
+              </div>
             </TabsContent>
           </Tabs>
         </Card>
