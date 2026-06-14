@@ -129,10 +129,11 @@ export default function Onboarding() {
     setSaving(true);
     try {
       await api.put("/whatsapp/config", {
-        provider: "zapi", ...zapi,
+        provider: "baileys", ...zapi,
         bot_enabled: true, bot_prompt: data.bot_prompt,
       });
       toast.success("Configuração WhatsApp salva");
+      await api.post("/whatsapp/baileys/reconnect").catch(() => api.post("/whatsapp/baileys/restart").catch(() => null));
       if (!(await fetchAnyQr())) toast.info("Aguardando o QR Code do WhatsApp...");
     } catch {
       toast.error("Erro ao salvar WhatsApp");

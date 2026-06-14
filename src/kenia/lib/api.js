@@ -748,15 +748,6 @@ const write = (key, value) => localStorage.setItem(`static_api_${key}`, JSON.str
 const response = (data, status = 200, headers = {}) => Promise.resolve({ data: clone(data), status, statusText: "OK", headers, config: {} });
 const nextId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
-const callZapiCloud = async (action, body = {}) => {
-  const cfg = read("whatsapp_config", defaultWhatsAppConfig);
-  const { data, error } = await supabase.functions.invoke("whatsapp-zapi", {
-    body: { action, config: cfg, ...body },
-  });
-  if (error) throw error;
-  return data || {};
-};
-
 const buildJitsiLink = (seed) => {
   const safe = String(seed || `kenia-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`)
     .replace(/[^a-zA-Z0-9-]/g, "-")
@@ -834,16 +825,13 @@ const staticGet = async (url, config = {}) => {
   }
   if (path === "/creatives") return response(read("creatives", seedCreatives));
   if (path === "/settings") return response({ using_default_text: true, using_default_image: true, llm_text_key_masked: "Emergent padrão", llm_image_key_masked: "Emergent padrão" });
-  if (path === "/whatsapp/diagnostics") return response({ ok: true, static_mode: false, checks: [
-    { id: "cloud-zapi", ok: true, label: "Z-API via Cloud ativa", msg: "O QR Code pode ser gerado pela integração Z-API sem backend externo.", hint: "Preencha Instance ID, Instance Token e Client-Token quando sua conta Z-API exigir." },
+  if (path === "/whatsapp/diagnostics") return response({ ok: true, static_mode: true, checks: [
+    { id: "static-site", ok: true, label: "Modo demonstração ativo", msg: "Painel rodando sem backend externo — as funções de WhatsApp em tempo real ficam desativadas até você publicar um backend (Render/VPS) e definir VITE_BACKEND_URL.", hint: "Você pode continuar usando CRM, Agenda, ChatIA e Finance normalmente. Quando publicar o backend Baileys, esta tela passa a exibir o QR Code real." },
   ] });
   if (path === "/whatsapp/default-prompt") return response({ prompt: DEFAULT_PROMPT });
-  if (path === "/whatsapp/qr" || path === "/whatsapp/qr/image") {
-    try { return response(await callZapiCloud("qr")); }
-    catch (e) { return response({ connected: false, error: e?.message || String(e), fallback: true }); }
-  }
-  if (path === "/whatsapp/baileys/status") return response({ ok: true, connected: false, state: "unavailable", last_error: "Baileys requer um backend Node persistente. Use a aba Z-API para gerar QR Code neste ambiente." });
-  if (path === "/whatsapp/baileys/qr") return response({ qr: null, state: "unavailable" });
+  if (path === "/whatsapp/qr" || path === "/whatsapp/qr/image") return response({ connected: false, error: "STATIC_MODE", fallback: true });
+  if (path === "/whatsapp/baileys/status") return response({ ok: true, connected: false, state: "static", last_error: "Modo site estático ativo. Para conectar WhatsApp real, publique também um backend e configure VITE_BACKEND_URL." });
+  if (path === "/whatsapp/baileys/qr") return response({ qr: null, state: "static" });
   if (path === "/whatsapp/logs") return response(read("logs", seedLogs));
   if (path === "/whatsapp/bot-delivery-stats") return response({ total_bot: 1, total_failures: 0, recent_failures: [] });
   if (path === "/debug/instructions") return response(read("debug_instructions", []));
@@ -1180,12 +1168,7 @@ const staticPost = (url, body = {}) => {
     return response({ ok: true });
   }
   if (path === "/settings/test-text" || path === "/settings/test-image") return response({ ok: false, error: "Modo estático: backend de teste indisponível.", model: "static" });
-  if (path === "/whatsapp/test-connection") {
-    return (async () => {
-      try { return response(await callZapiCloud("status")); }
-      catch (e) { return response({ connected: false, provider: "zapi", error: e?.message || String(e), hint: "Confira Instance ID, Instance Token e Client-Token da Z-API." }); }
-    })();
-  }
+  if (path === "/whatsapp/test-connection") return response({ connected: false, provider: "static", error: "STATIC_MODE", hint: "Site publicado como estático; conexão real de WhatsApp exige backend externo." });
   if (path.startsWith("/whatsapp/")) return response({ ok: false, connected: false, fallback: true, state: "offline", error: "STATIC_MODE" });
   if (path === "/legislation/refresh" || path === "/seed/demo") return response({ ok: true });
   if (path === "/creatives/fuse-images") {
