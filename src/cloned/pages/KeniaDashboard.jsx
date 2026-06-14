@@ -4,7 +4,8 @@ import {
   LayoutDashboard, MessageCircle, Kanban, FileText, Calendar, Wallet,
   Sparkles, BarChart3, Settings, LogOut, Search, Plus, Mic, Send, QrCode,
   CheckCircle2, Clock, TrendingUp, Users, DollarSign, Bell, ArrowUpRight,
-  Phone, Paperclip, MoreHorizontal,
+  Phone, Paperclip, MoreHorizontal, Power, RefreshCw, Copy, Smartphone, Webhook,
+  Shield, Volume2,
 } from 'lucide-react';
 import { AuthContext } from '../ClonedAuthContext';
 
@@ -195,7 +196,279 @@ function Dashboard() {
   );
 }
 
+const WA_CFG_KEY = 'kg.wa.cfg';
+const WA_DEFAULTS = {
+  status: 'disconnected', // 'connected' | 'disconnected' | 'pairing'
+  numero: '',
+  instancia: 'kenia-adv-01',
+  servidor: 'https://baileys.kenia-adv.render.com',
+  webhook: 'https://baileys.kenia-adv.render.com/webhook/messages',
+  saudacao: 'Olá! Aqui é o atendimento do escritório Kênia Garcia Advocacia. Em instantes uma de nossas advogadas falará com você. 🙏',
+  foraExpediente: 'Recebemos sua mensagem fora do horário comercial. Retornaremos amanhã a partir das 9h.',
+  iaAtiva: true,
+  respondeAudio: true,
+  horarioInicio: '09:00',
+  horarioFim: '18:00',
+  diasUteis: true,
+  whisperEnabled: true,
+  ttsEnabled: true,
+  voz: 'feminina-pt-br',
+};
+
+function loadCfg() {
+  try { return { ...WA_DEFAULTS, ...JSON.parse(localStorage.getItem(WA_CFG_KEY) || '{}') }; }
+  catch { return WA_DEFAULTS; }
+}
+
+function Toggle({ checked, onChange }) {
+  return (
+    <button
+      onClick={() => onChange(!checked)}
+      className="w-10 h-6 rounded-full relative transition-colors shrink-0"
+      style={{ background: checked ? GOLD : 'rgba(255,255,255,0.1)' }}
+    >
+      <span
+        className="absolute top-0.5 w-5 h-5 rounded-full bg-white transition-all"
+        style={{ left: checked ? '18px' : '2px' }}
+      />
+    </button>
+  );
+}
+
+function Field({ label, hint, children }) {
+  return (
+    <div>
+      <label className="text-xs font-medium block mb-2" style={{ color: 'rgba(246,239,229,0.75)' }}>{label}</label>
+      {children}
+      {hint && <p className="text-[11px] mt-1.5" style={{ color: 'rgba(246,239,229,0.45)' }}>{hint}</p>}
+    </div>
+  );
+}
+
+function inputCls() {
+  return 'w-full px-3 py-2.5 rounded-md text-sm text-white placeholder:text-white/30 focus:outline-none focus:border-[color:var(--g)]';
+}
+function inputStyle() {
+  return { background: 'rgba(255,255,255,0.04)', border: `1px solid ${LINE}`, ['--g']: GOLD };
+}
+
+function WAConfig({ cfg, setCfg, save, saved }) {
+  const setField = (k, v) => setCfg({ ...cfg, [k]: v });
+  const isConnected = cfg.status === 'connected';
+  const isPairing = cfg.status === 'pairing';
+
+  const startPairing = () => setCfg({ ...cfg, status: 'pairing' });
+  const finishPairing = () => setCfg({ ...cfg, status: 'connected', numero: cfg.numero || '+55 11 98123-4567' });
+  const disconnect = () => setCfg({ ...cfg, status: 'disconnected' });
+
+  return (
+    <div className="grid lg:grid-cols-3 gap-6 pb-2">
+      {/* Connection */}
+      <Card className="p-6 lg:col-span-2">
+        <div className="flex items-center justify-between mb-5">
+          <div>
+            <h3 style={{ fontFamily: serif, color: 'white' }} className="text-xl">Conexão Baileys</h3>
+            <p className="text-xs mt-1" style={{ color: 'rgba(246,239,229,0.55)' }}>WhatsApp auto-hospedado via QR Code — sem custo por mensagem.</p>
+          </div>
+          <Pill color={isConnected ? '#7FD19A' : isPairing ? GOLD : '#E07A6B'}>
+            <span className="flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-current" />
+              {isConnected ? 'Conectado' : isPairing ? 'Aguardando QR' : 'Desconectado'}
+            </span>
+          </Pill>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-5">
+          <div className="flex flex-col items-center justify-center p-6 rounded-lg" style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${LINE}` }}>
+            {isConnected ? (
+              <>
+                <div className="w-20 h-20 rounded-full flex items-center justify-center mb-3" style={{ background: '#7FD19A26', color: '#7FD19A' }}>
+                  <CheckCircle2 className="w-10 h-10" strokeWidth={1.5} />
+                </div>
+                <div className="text-sm text-white mb-1">Sessão ativa</div>
+                <div className="text-xs mb-4" style={{ color: 'rgba(246,239,229,0.55)' }}>{cfg.numero}</div>
+                <button onClick={disconnect} className="px-4 py-2 rounded-md text-xs font-medium flex items-center gap-2" style={{ border: `1px solid #E07A6B66`, color: '#E07A6B' }}>
+                  <Power className="w-3.5 h-3.5" /> Desconectar
+                </button>
+              </>
+            ) : isPairing ? (
+              <>
+                <div className="w-44 h-44 rounded-lg p-3 mb-3 grid grid-cols-12 gap-px" style={{ background: 'white' }}>
+                  {Array.from({ length: 144 }).map((_, i) => (
+                    <div key={i} style={{ background: Math.random() > 0.45 ? '#111' : 'white' }} />
+                  ))}
+                </div>
+                <div className="text-xs text-center mb-3" style={{ color: 'rgba(246,239,229,0.6)' }}>
+                  Abra o WhatsApp no celular → Aparelhos conectados → Conectar aparelho
+                </div>
+                <button onClick={finishPairing} className="px-4 py-2 rounded-md text-xs font-medium text-white" style={{ background: GOLD }}>
+                  Simular leitura do QR
+                </button>
+              </>
+            ) : (
+              <>
+                <div className="w-20 h-20 rounded-full flex items-center justify-center mb-3" style={{ background: 'rgba(255,255,255,0.05)', color: 'rgba(246,239,229,0.5)' }}>
+                  <QrCode className="w-10 h-10" strokeWidth={1.5} />
+                </div>
+                <div className="text-sm text-white mb-1">Nenhuma sessão ativa</div>
+                <div className="text-xs mb-4 text-center" style={{ color: 'rgba(246,239,229,0.55)' }}>Gere um QR Code para conectar o WhatsApp do escritório.</div>
+                <button onClick={startPairing} className="px-5 py-2.5 rounded-md text-sm font-medium text-white flex items-center gap-2 hover:opacity-90" style={{ background: GOLD }}>
+                  <QrCode className="w-4 h-4" /> Gerar QR Code
+                </button>
+              </>
+            )}
+          </div>
+
+          <div className="space-y-4">
+            <Field label="Número conectado">
+              <input className={inputCls()} style={inputStyle()} value={cfg.numero} onChange={(e) => setField('numero', e.target.value)} placeholder="+55 11 98123-4567" />
+            </Field>
+            <Field label="Nome da instância" hint="Identificador único da sessão no servidor Baileys.">
+              <input className={inputCls()} style={inputStyle()} value={cfg.instancia} onChange={(e) => setField('instancia', e.target.value)} />
+            </Field>
+            <Field label="Servidor Baileys">
+              <div className="flex gap-2">
+                <input className={inputCls()} style={inputStyle()} value={cfg.servidor} onChange={(e) => setField('servidor', e.target.value)} />
+                <button className="px-3 rounded-md hover:bg-white/5" style={{ border: `1px solid ${LINE}`, color: GOLD }} onClick={() => navigator.clipboard?.writeText(cfg.servidor)}>
+                  <Copy className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </Field>
+          </div>
+        </div>
+      </Card>
+
+      {/* IA */}
+      <Card className="p-6">
+        <h3 style={{ fontFamily: serif, color: 'white' }} className="text-xl mb-5">Robô IA</h3>
+        <div className="space-y-4">
+          {[
+            { k: 'iaAtiva', l: 'Responder automaticamente', d: 'IA responde leads e qualifica casos 24h.', icon: Sparkles },
+            { k: 'respondeAudio', l: 'Responder em áudio (TTS)', d: 'Voz humanizada quando o cliente manda áudio.', icon: Volume2 },
+            { k: 'whisperEnabled', l: 'Transcrever áudios (Whisper)', d: 'Converte áudios recebidos em texto.', icon: Mic },
+          ].map((o) => (
+            <div key={o.k} className="flex items-start gap-3">
+              <div className="w-9 h-9 rounded-md flex items-center justify-center shrink-0" style={{ background: `${GOLD}1A`, color: GOLD }}>
+                <o.icon className="w-4 h-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center justify-between gap-3 mb-0.5">
+                  <span className="text-sm text-white">{o.l}</span>
+                  <Toggle checked={cfg[o.k]} onChange={(v) => setField(o.k, v)} />
+                </div>
+                <p className="text-[11px]" style={{ color: 'rgba(246,239,229,0.5)' }}>{o.d}</p>
+              </div>
+            </div>
+          ))}
+
+          <div className="pt-3 mt-2 border-t" style={{ borderColor: LINE }}>
+            <Field label="Voz da advogada IA">
+              <select className={inputCls()} style={inputStyle()} value={cfg.voz} onChange={(e) => setField('voz', e.target.value)}>
+                <option value="feminina-pt-br">Feminina · PT-BR (padrão)</option>
+                <option value="feminina-suave">Feminina · suave</option>
+                <option value="feminina-firme">Feminina · firme</option>
+                <option value="masculina-pt-br">Masculina · PT-BR</option>
+              </select>
+            </Field>
+          </div>
+        </div>
+      </Card>
+
+      {/* Mensagens */}
+      <Card className="p-6 lg:col-span-2">
+        <h3 style={{ fontFamily: serif, color: 'white' }} className="text-xl mb-5">Mensagens automáticas</h3>
+        <div className="space-y-4">
+          <Field label="Saudação inicial" hint="Enviada no primeiro contato do lead.">
+            <textarea rows={3} className={`${inputCls()} resize-none`} style={inputStyle()} value={cfg.saudacao} onChange={(e) => setField('saudacao', e.target.value)} />
+          </Field>
+          <Field label="Fora do horário comercial" hint="Enviada quando o cliente escreve fora do expediente.">
+            <textarea rows={2} className={`${inputCls()} resize-none`} style={inputStyle()} value={cfg.foraExpediente} onChange={(e) => setField('foraExpediente', e.target.value)} />
+          </Field>
+        </div>
+      </Card>
+
+      {/* Horário + webhook */}
+      <Card className="p-6">
+        <h3 style={{ fontFamily: serif, color: 'white' }} className="text-xl mb-5">Horário & Webhook</h3>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Início">
+              <input type="time" className={inputCls()} style={inputStyle()} value={cfg.horarioInicio} onChange={(e) => setField('horarioInicio', e.target.value)} />
+            </Field>
+            <Field label="Fim">
+              <input type="time" className={inputCls()} style={inputStyle()} value={cfg.horarioFim} onChange={(e) => setField('horarioFim', e.target.value)} />
+            </Field>
+          </div>
+          <div className="flex items-center justify-between p-3 rounded-md" style={{ background: 'rgba(255,255,255,0.03)', border: `1px solid ${LINE}` }}>
+            <div className="flex items-center gap-2">
+              <Shield className="w-4 h-4" style={{ color: GOLD }} />
+              <span className="text-sm text-white">Atender só em dias úteis</span>
+            </div>
+            <Toggle checked={cfg.diasUteis} onChange={(v) => setField('diasUteis', v)} />
+          </div>
+          <Field label="Webhook" hint="Endpoint que recebe os eventos da sessão Baileys.">
+            <div className="flex gap-2">
+              <input className={inputCls()} style={inputStyle()} value={cfg.webhook} onChange={(e) => setField('webhook', e.target.value)} />
+              <button className="px-3 rounded-md hover:bg-white/5" style={{ border: `1px solid ${LINE}`, color: GOLD }} onClick={() => navigator.clipboard?.writeText(cfg.webhook)}>
+                <Copy className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </Field>
+        </div>
+      </Card>
+
+      {/* Save bar */}
+      <div className="lg:col-span-3 sticky bottom-0 -mx-8 px-8 py-4 flex items-center justify-between" style={{ background: `${DARK_2}F2`, borderTop: `1px solid ${LINE}` }}>
+        <span className="text-xs" style={{ color: 'rgba(246,239,229,0.55)' }}>
+          {saved ? '✓ Configurações salvas com sucesso.' : 'Alterações ainda não salvas.'}
+        </span>
+        <div className="flex items-center gap-3">
+          <button onClick={() => setCfg(WA_DEFAULTS)} className="px-4 py-2 rounded-md text-sm hover:bg-white/5" style={{ border: `1px solid ${LINE}`, color: 'rgba(246,239,229,0.75)' }}>
+            Restaurar padrões
+          </button>
+          <button onClick={save} className="px-6 py-2 rounded-md text-sm font-medium text-white hover:opacity-90" style={{ background: GOLD }}>
+            Salvar alterações
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function WhatsApp() {
+  const [view, setView] = useState('conversas');
+  const [cfg, setCfg] = useState(() => loadCfg());
+  const [saved, setSaved] = useState(false);
+  const save = () => {
+    localStorage.setItem(WA_CFG_KEY, JSON.stringify(cfg));
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2500);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 p-1 rounded-md w-fit" style={{ background: PANEL, border: `1px solid ${LINE}` }}>
+        {[{ k: 'conversas', l: 'Conversas', i: MessageCircle }, { k: 'config', l: 'Configurações', i: Settings }].map((t) => (
+          <button
+            key={t.k}
+            onClick={() => setView(t.k)}
+            className="px-4 py-2 rounded text-sm flex items-center gap-2 transition-colors"
+            style={{
+              background: view === t.k ? `${GOLD}26` : 'transparent',
+              color: view === t.k ? 'white' : 'rgba(246,239,229,0.65)',
+            }}
+          >
+            <t.i className="w-3.5 h-3.5" /> {t.l}
+          </button>
+        ))}
+      </div>
+
+      {view === 'config' ? <WAConfig cfg={cfg} setCfg={setCfg} save={save} saved={saved} /> : <WAConversas />}
+    </div>
+  );
+}
+
+function WAConversas() {
   const [ativa, setAtiva] = useState(0);
   const [msg, setMsg] = useState('');
   const conversa = CONVERSAS[ativa];
