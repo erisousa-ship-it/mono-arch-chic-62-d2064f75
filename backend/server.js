@@ -209,7 +209,7 @@ app.post("/api/whatsapp/baileys/reconnect", auth, async (_req, res) => {
   }
 });
 
-app.post("/api/whatsapp/logout", auth, async (_req, res) => {
+async function logoutAndReset(res) {
   try {
     try { await state.sock?.logout?.(); } catch {}
     await resetAuthDir();
@@ -222,11 +222,11 @@ app.post("/api/whatsapp/logout", auth, async (_req, res) => {
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
-});
+}
 
-app.post("/api/whatsapp/baileys/logout", auth, async (req, res) => {
-  app._router.handle(req, res, () => {});
-});
+app.post("/api/whatsapp/logout", auth, async (_req, res) => logoutAndReset(res));
+
+app.post("/api/whatsapp/baileys/logout", auth, async (_req, res) => logoutAndReset(res));
 
 app.listen(PORT, () => {
   console.log(`Kenia WhatsApp backend on :${PORT}`);
