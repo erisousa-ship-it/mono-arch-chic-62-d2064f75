@@ -43,4 +43,4 @@ services:
       - key: OLLAMA_MODEL
         value: qwen2.5:3b-instruct
       - key: OLLAMA_BASE_URL
-        value: http://127.0.0.1:4040
+        sync: false
