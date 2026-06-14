@@ -64,25 +64,40 @@ function auth(req, res, next) {
   next();
 }
 
-async function startSock() {
+async function startSock({ clearAuth = false } = {}) {
+  const seq = ++startSeq;
+  if (clearAuth) await resetAuthSession();
+  else stopSock("new-start");
+  if (qrWatchdogTimer) clearTimeout(qrWatchdogTimer);
   state.startingAt = Date.now();
   state.qr = null;
   state.qrDataUrl = null;
   state.connected = false;
+  state.lastError = null;
 
   const { state: authState, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+  const { version } = await fetchLatestBaileysVersion();
   const sock = makeWASocket({
     auth: authState,
+    version,
     logger,
     printQRInTerminal: false,
     browser: ["Kenia", "Chrome", "1.0"],
   });
 
+  qrWatchdogTimer = setTimeout(() => {
+    if (seq === startSeq && !state.connected && !state.qrDataUrl) {
+      startSock({ clearAuth: true }).catch((e) => { state.lastError = e.message; });
+    }
+  }, 25000);
+
   sock.ev.on("creds.update", saveCreds);
   sock.ev.on("connection.update", async (update) => {
+    if (seq !== startSeq) return;
     const { connection, lastDisconnect, qr } = update;
     if (qr) {
       state.qr = qr;
+      state.lastError = null;
       try {
         state.qrDataUrl = await QRCode.toDataURL(qr, { width: 320, margin: 2 });
       } catch (e) {
@@ -91,14 +106,19 @@ async function startSock() {
     }
     if (connection === "open") {
       state.connected = true;
+      state.lastError = null;
       state.qr = null;
       state.qrDataUrl = null;
+      if (qrWatchdogTimer) clearTimeout(qrWatchdogTimer);
     }
     if (connection === "close") {
       state.connected = false;
       const code = lastDisconnect?.error?.output?.statusCode;
+      state.lastError = lastDisconnect?.error?.message || `Conexão fechada (${code || "sem código"})`;
       if (code !== DisconnectReason.loggedOut) {
-        setTimeout(() => startSock().catch(() => {}), 2000);
+        scheduleStart({ delay: 2000, clearAuth: code === DisconnectReason.badSession || code === DisconnectReason.connectionReplaced });
+      } else {
+        scheduleStart({ delay: 1000, clearAuth: true });
       }
     }
   });
