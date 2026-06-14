@@ -24,6 +24,7 @@ const state = {
   qrDataUrl: null,
   connected: false,
   startingAt: 0,
+  config: { provider: "baileys", bot_enabled: true },
 };
 
 function auth(req, res, next) {
@@ -77,6 +78,25 @@ async function startSock() {
 }
 
 app.get("/api", (_req, res) => res.json({ ok: true, service: "kenia-whatsapp" }));
+
+app.get("/api/whatsapp/config", auth, (_req, res) => {
+  res.json(state.config);
+});
+
+app.put("/api/whatsapp/config", auth, (req, res) => {
+  state.config = { ...state.config, ...(req.body || {}), provider: "baileys" };
+  res.json(state.config);
+});
+
+app.get("/api/whatsapp/diagnostics", auth, (_req, res) => {
+  res.json({ ok: true, static_mode: false, checks: [
+    { id: "baileys-backend", ok: true, label: "Backend Baileys ativo", msg: "Serviço WhatsApp publicado e respondendo.", hint: state.connected ? "WhatsApp conectado." : "Gere/escaneie o QR Code para conectar." },
+  ] });
+});
+
+app.post("/api/whatsapp/test-connection", auth, (_req, res) => {
+  res.json({ connected: state.connected, provider: "baileys", state: state.connected ? "open" : state.qrDataUrl ? "qr" : "connecting" });
+});
 
 app.get("/api/whatsapp/baileys/status", auth, (_req, res) => {
   res.json({
