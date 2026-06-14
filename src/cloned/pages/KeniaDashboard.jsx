@@ -803,6 +803,25 @@ function Financeiro() {
 
 function Criativos() {
   const [prompt, setPrompt] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [image, setImage] = useState(null);
+  const [provider, setProvider] = useState(null);
+  const [error, setError] = useState(null);
+  const gerar = async () => {
+    if (!prompt.trim()) return;
+    setLoading(true); setError(null); setImage(null); setProvider(null);
+    try {
+      const { data, error } = await supabase.functions.invoke('ai-router', {
+        body: { mode: 'image', prompt: prompt.trim() },
+      });
+      if (error) throw error;
+      if (!data?.image) throw new Error('Sem imagem na resposta');
+      setImage(data.image);
+      setProvider(data.provider);
+    } catch (e) {
+      setError(e.message || String(e));
+    } finally { setLoading(false); }
+  };
   const ideias = [
     { rede: 'Instagram', titulo: 'Direitos na rescisão sem justa causa', tag: 'Carrossel · 7 slides' },
     { rede: 'LinkedIn', titulo: 'Reforma tributária: o que muda para PMEs', tag: 'Artigo · 800 palavras' },
@@ -817,14 +836,22 @@ function Criativos() {
           <input
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && !loading && gerar()}
             placeholder="Ex: post sobre licença-maternidade para autônomas…"
             className="flex-1 px-4 py-3 rounded-md text-sm text-white placeholder:text-white/30 focus:outline-none"
             style={{ background: 'rgba(255,255,255,0.04)', border: `1px solid ${LINE}` }}
           />
-          <button className="px-6 py-3 rounded-md text-sm font-medium text-white flex items-center gap-2 hover:opacity-90" style={{ background: GOLD }}>
-            <Sparkles className="w-4 h-4" /> Gerar
+          <button onClick={gerar} disabled={loading} className="px-6 py-3 rounded-md text-sm font-medium text-white flex items-center gap-2 hover:opacity-90 disabled:opacity-50" style={{ background: GOLD }}>
+            <Sparkles className="w-4 h-4" /> {loading ? 'Gerando...' : 'Gerar'}
           </button>
         </div>
+        {error && <div className="text-xs mt-3" style={{ color: '#e88' }}>Falha: {error}</div>}
+        {image && (
+          <div className="mt-4">
+            <img src={image} alt="Criativo gerado" className="rounded-md max-h-[480px]" />
+            <div className="text-[11px] mt-2" style={{ color: GOLD_SOFT }}>via {provider}</div>
+          </div>
+        )}
       </Card>
 
       <div className="grid md:grid-cols-2 gap-4">
