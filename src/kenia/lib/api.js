@@ -1,7 +1,22 @@
 import axios from "axios";
 import { supabase } from "@/integrations/supabase/client";
 
-const BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || "").replace(/\/$/, "");
+// Backend URL — primeiro tenta a variável de build, depois o valor salvo pelo
+// usuário em /app/whatsapp-connection (localStorage `wa_conn_base_url`).
+// Assim o painel funciona em modo "site estático" sem precisar reconstruir.
+const readSavedBackend = () => {
+  try {
+    if (typeof localStorage === "undefined") return "";
+    const raw = (localStorage.getItem("wa_conn_base_url") || "").trim();
+    if (!raw) return "";
+    if (!/^https?:\/\//i.test(raw)) return "";
+    return raw.replace(/\/+$/, "").replace(/\/api$/, "");
+  } catch {
+    return "";
+  }
+};
+const ENV_BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || "").replace(/\/$/, "");
+const BACKEND_URL = ENV_BACKEND_URL || readSavedBackend();
 export const HAS_BACKEND = Boolean(BACKEND_URL);
 export const API = HAS_BACKEND ? `${BACKEND_URL}/api` : "";
 const DEFAULT_OLLAMA_URL = HAS_BACKEND
