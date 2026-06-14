@@ -27,6 +27,7 @@ const state = {
   connected: false,
   startingAt: 0,
   lastError: null,
+  qrAttempts: 0,
   config: { provider: "baileys", bot_enabled: true },
 };
 
@@ -74,6 +75,7 @@ async function startSock({ clearAuth = false } = {}) {
   state.qrDataUrl = null;
   state.connected = false;
   state.lastError = null;
+  if (clearAuth) state.qrAttempts = 0;
 
   const { state: authState, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version } = await fetchLatestBaileysVersion();
@@ -87,6 +89,12 @@ async function startSock({ clearAuth = false } = {}) {
 
   qrWatchdogTimer = setTimeout(() => {
     if (seq === startSeq && !state.connected && !state.qrDataUrl) {
+      state.qrAttempts += 1;
+      if (state.qrAttempts >= 2) {
+        state.lastError = "O Baileys não gerou QR automaticamente. Clique em Nova sessão / QR limpo para recriar a sessão.";
+        stopSock("qr-timeout");
+        return;
+      }
       startSock({ clearAuth: true }).catch((e) => { state.lastError = e.message; });
     }
   }, 25000);
@@ -98,6 +106,7 @@ async function startSock({ clearAuth = false } = {}) {
     if (qr) {
       state.qr = qr;
       state.lastError = null;
+      state.qrAttempts = 0;
       try {
         state.qrDataUrl = await QRCode.toDataURL(qr, { width: 320, margin: 2 });
       } catch (e) {
