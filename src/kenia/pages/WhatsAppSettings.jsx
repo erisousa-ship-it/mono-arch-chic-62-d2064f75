@@ -82,6 +82,10 @@ export default function WhatsAppSettings() {
       failureCountRef.current = 0;
       setBaileysStatus(normalized);
       if (!normalized.connected) {
+        if (normalized.state === "connecting" && Number(normalized.secondsWaiting || 0) >= 30 && !normalized.hasQr) {
+          setBaileysStatus({ ...normalized, state: "timeout", last_error: "O QR não foi gerado. Crie uma nova sessão para forçar um QR limpo." });
+          return;
+        }
         try {
           const { data: qr } = await api.get("/whatsapp/baileys/qr");
           setBaileysQr(qr);
@@ -139,6 +143,25 @@ export default function WhatsAppSettings() {
       setTimeout(pollBaileys, 1500);
     } catch {
       toast.error("Erro ao reconectar — verifique logs do backend");
+    } finally {
+      setBaileysLoggingOut(false);
+    }
+  };
+
+  const baileysResetSession = async () => {
+    if (!hasBackend() || baileysStatus?.state === "static") {
+      toast.warning("Configure a URL do backend publicado em WhatsApp Connection para gerar o QR real.", { duration: 9000 });
+      return;
+    }
+    setBaileysLoggingOut(true);
+    try {
+      const { data } = await api.post("/whatsapp/baileys/reset-session");
+      toast.success("Sessão limpa — gerando QR novo...");
+      setBaileysStatus(data);
+      setBaileysQr(data?.qr ? { qr: data.qr } : null);
+      setTimeout(pollBaileys, 2500);
+    } catch (e) {
+      toast.error("Erro ao criar nova sessão — verifique logs do backend");
     } finally {
       setBaileysLoggingOut(false);
     }
