@@ -15,9 +15,14 @@ const readSavedBackend = () => {
     return "";
   }
 };
-const ENV_BACKEND_URL = (import.meta.env.VITE_BACKEND_URL || "").replace(/\/$/, "");
-const BACKEND_URL = ENV_BACKEND_URL || readSavedBackend();
-export const HAS_BACKEND = Boolean(BACKEND_URL);
+export const getBackendUrl = () => {
+  const env = (import.meta.env.VITE_BACKEND_URL || "").trim();
+  const raw = env || readSavedBackend();
+  return raw.replace(/\/+$/, "").replace(/\/api$/, "");
+};
+const BACKEND_URL = getBackendUrl();
+export const hasBackend = () => Boolean(getBackendUrl());
+export const HAS_BACKEND = hasBackend();
 export const API = HAS_BACKEND ? `${BACKEND_URL}/api` : "";
 const DEFAULT_OLLAMA_URL = HAS_BACKEND
   ? `${API}/generate`
@@ -1279,16 +1284,26 @@ const staticDelete = (url) => {
 
 export const liveApi = axios.create({ baseURL: API });
 
+const liveRequest = (method, url, ...args) => {
+  const baseURL = getBackendUrl() ? `${getBackendUrl()}/api` : API;
+  return liveApi.request({ method, url, baseURL, ...(method === "get" || method === "delete" ? { ...(args[0] || {}) } : { data: args[0], ...(args[1] || {}) }) });
+};
+
 liveApi.interceptors.request.use((cfg) => {
+  cfg.headers = cfg.headers || {};
   const token = localStorage.getItem("lf_token");
   if (token) cfg.headers.Authorization = `Bearer ${token}`;
+  const whatsappToken = localStorage.getItem("wa_conn_token");
+  if (whatsappToken) cfg.headers["x-internal-token"] = whatsappToken;
   return cfg;
 });
 
 liveApi.interceptors.response.use(
   (r) => r,
   (err) => {
-    if (err.response?.status === 401) {
+    const requestUrl = String(err.config?.url || "");
+    const isWhatsAppBackendAuth = requestUrl.startsWith("/whatsapp/");
+    if (err.response?.status === 401 && !isWhatsAppBackendAuth) {
       localStorage.removeItem("lf_token");
       localStorage.removeItem("lf_user");
       if (!window.location.pathname.startsWith("/login") && window.location.pathname !== "/") {
@@ -1351,7 +1366,7 @@ export const api = HAS_BACKEND
         const [path] = String(url).split("?");
         if (cloudFirstGetPaths.has(path)) return staticGet(url, config);
         try {
-          const res = await liveApi.get(url, config);
+          const res = await liveRequest("get", url, config);
           if (fallbackToStaticGetPaths.has(path) && isEmptyPayload(res?.data)) {
             return staticGet(url, config);
           }
@@ -1371,21 +1386,45 @@ export const api = HAS_BACKEND
         if (cloudFirstPostPaths.has(path)) return staticPost(url, body);
         if (path === "/chat/message") return staticPost(url, body);
         if (liveFirstWithStaticFallbackPostPaths.has(path)) {
-          return liveApi.post(url, body, config).catch(() => staticPost(url, body));
+          return liveRequest("post", url, body, config).catch(() => staticPost(url, body));
         }
         if (fallbackToStaticPostPaths.has(path)) {
-          return liveApi.post(url, body, config).catch(() => staticPost(url, body));
+          return liveRequest("post", url, body, config).catch(() => staticPost(url, body));
         }
-        return liveApi.post(url, body, config);
+        return liveRequest("post", url, body, config);
       },
-      put: liveApi.put.bind(liveApi),
-      patch: (url, body, config) => String(url).split("?")[0].startsWith("/legal-deadlines/") ? staticPatch(url, body) : liveApi.patch(url, body, config),
-      delete: (url, config) => String(url).split("?")[0].startsWith("/legal-deadlines/") ? staticDelete(url) : liveApi.delete(url, config),
+      put: (url, body, config) => liveRequest("put", url, body, config),
+      patch: (url, body, config) => String(url).split("?")[0].startsWith("/legal-deadlines/") ? staticPatch(url, body) : liveRequest("patch", url, body, config),
+      delete: (url, config) => String(url).split("?")[0].startsWith("/legal-deadlines/") ? staticDelete(url) : liveRequest("delete", url, config),
     }
   : {
-      get: staticGet,
-      post: staticPost,
-      put: staticPut,
+      get: async (url, config) => {
+        const [path] = String(url).split("?");
+        if (hasBackend() && (backendSafeGetPaths.has(path) || path === "/whatsapp/config")) {
+          try {
+            const res = await liveRequest("get", url, config);
+            if (path === "/whatsapp/config") return { ...res, data: withCurrentBotPrompt(res?.data || {}) };
+            return res;
+          } catch {
+            return staticGet(url, config);
+          }
+        }
+        return staticGet(url, config);
+      },
+      post: (url, body, config) => {
+        const [path] = String(url).split("?");
+        if (hasBackend() && (path.startsWith("/whatsapp/") || fallbackToStaticPostPaths.has(path))) {
+          return liveRequest("post", url, body, config).catch(() => staticPost(url, body));
+        }
+        return staticPost(url, body);
+      },
+      put: (url, body, config) => {
+        const [path] = String(url).split("?");
+        if (hasBackend() && path === "/whatsapp/config") {
+          return liveRequest("put", url, body, config).catch(() => staticPut(url, body));
+        }
+        return staticPut(url, body);
+      },
       patch: staticPatch,
       delete: staticDelete,
     };

@@ -24,6 +24,7 @@ const state = {
   qrDataUrl: null,
   connected: false,
   startingAt: 0,
+  config: { provider: "baileys", bot_enabled: true },
 };
 
 function auth(req, res, next) {
@@ -78,9 +79,29 @@ async function startSock() {
 
 app.get("/api", (_req, res) => res.json({ ok: true, service: "kenia-whatsapp" }));
 
+app.get("/api/whatsapp/config", auth, (_req, res) => {
+  res.json(state.config);
+});
+
+app.put("/api/whatsapp/config", auth, (req, res) => {
+  state.config = { ...state.config, ...(req.body || {}), provider: "baileys" };
+  res.json(state.config);
+});
+
+app.get("/api/whatsapp/diagnostics", auth, (_req, res) => {
+  res.json({ ok: true, static_mode: false, checks: [
+    { id: "baileys-backend", ok: true, label: "Backend Baileys ativo", msg: "Serviço WhatsApp publicado e respondendo.", hint: state.connected ? "WhatsApp conectado." : "Gere/escaneie o QR Code para conectar." },
+  ] });
+});
+
+app.post("/api/whatsapp/test-connection", auth, (_req, res) => {
+  res.json({ connected: state.connected, provider: "baileys", state: state.connected ? "open" : state.qrDataUrl ? "qr" : "connecting" });
+});
+
 app.get("/api/whatsapp/baileys/status", auth, (_req, res) => {
   res.json({
     connected: state.connected,
+    state: state.connected ? "open" : state.qrDataUrl ? "qr" : "connecting",
     hasQr: !!state.qrDataUrl,
     startingAt: state.startingAt,
   });
@@ -90,11 +111,38 @@ app.get("/api/whatsapp/qr", auth, (_req, res) => {
   res.json({ qr: state.qrDataUrl, raw: state.qr });
 });
 
+app.get("/api/whatsapp/baileys/qr", auth, (_req, res) => {
+  res.json({ qr: state.qrDataUrl, raw: state.qr, state: state.connected ? "open" : state.qrDataUrl ? "qr" : "connecting" });
+});
+
 app.post("/api/whatsapp/baileys/restart", auth, async (_req, res) => {
   try {
     try { state.sock?.end?.(new Error("restart")); } catch {}
     await startSock();
     res.json({ ok: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/api/whatsapp/baileys/reconnect", auth, async (_req, res) => {
+  try {
+    try { state.sock?.end?.(new Error("reconnect")); } catch {}
+    await startSock();
+    res.json({ ok: true, connected: state.connected, state: state.connected ? "open" : "connecting" });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/api/whatsapp/baileys/logout", auth, async (_req, res) => {
+  try {
+    try { await state.sock?.logout?.(); } catch {}
+    state.connected = false;
+    state.qr = null;
+    state.qrDataUrl = null;
+    await startSock();
+    res.json({ ok: true, connected: false, state: "connecting" });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

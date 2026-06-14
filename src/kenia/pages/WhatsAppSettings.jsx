@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
-import { api, HAS_BACKEND } from "@/kenia/lib/api";
+import { api, getBackendUrl, hasBackend } from "@/kenia/lib/api";
 import { Card } from "@/kenia/components/ui/card";
 import { Button } from "@/kenia/components/ui/button";
 import { Input } from "@/kenia/components/ui/input";
@@ -39,7 +39,7 @@ export default function WhatsAppSettings() {
   const [baileysQr, setBaileysQr] = useState(null);
   const [baileysLoggingOut, setBaileysLoggingOut] = useState(false);
 
-  const backendUrl = (import.meta.env.VITE_BACKEND_URL || "");
+  const backendUrl = getBackendUrl();
   const webhookBase = `${backendUrl}/api/whatsapp/webhook`;
 
   const normalizeBaileysStatus = (status = {}) => {
@@ -123,8 +123,8 @@ export default function WhatsAppSettings() {
   };
 
   const baileysReconnect = async () => {
-    if (!HAS_BACKEND || baileysStatus?.state === "static") {
-      toast.warning("O WhatsApp real não roda no site estático. Configure VITE_BACKEND_URL com a URL do backend publicado para gerar o QR.", { duration: 9000 });
+    if (!hasBackend() || baileysStatus?.state === "static") {
+      toast.warning("Configure a URL do backend publicado em WhatsApp Connection para gerar o QR real.", { duration: 9000 });
       return;
     }
     setBaileysLoggingOut(true);
@@ -661,7 +661,7 @@ export default function WhatsAppSettings() {
                       <Button variant="outline" size="sm" onClick={pollBaileys} data-testid="baileys-refresh">
                         <RefreshCw className="w-3.5 h-3.5 mr-1.5" /> Atualizar
                       </Button>
-                      {!baileysStatus?.connected && baileysStatus?.state !== "static" && HAS_BACKEND && (
+                      {!baileysStatus?.connected && baileysStatus?.state !== "static" && hasBackend() && (
                         <Button
                           variant="outline"
                           size="sm"
@@ -756,8 +756,8 @@ export default function WhatsAppSettings() {
                           variant="outline"
                           className="ml-auto h-7 text-xs"
                           onClick={async () => {
-                            if (!HAS_BACKEND || baileysStatus?.state === "static") {
-                              toast.warning("Renovar QR só funciona depois que VITE_BACKEND_URL apontar para o backend publicado.", { duration: 9000 });
+                            if (!hasBackend() || baileysStatus?.state === "static") {
+                              toast.warning("Renovar QR só funciona depois de salvar a URL do backend publicado em WhatsApp Connection.", { duration: 9000 });
                               return;
                             }
                             try {
