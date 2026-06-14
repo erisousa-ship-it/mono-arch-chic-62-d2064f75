@@ -238,7 +238,7 @@ export default function WhatsAppSettings() {
     const candidates = [
       data?.data?.value, data?.data?.qrcode, data?.data?.image, data?.data?.base64,
       data?.data?.qrCode, data?.data?.qr, data?.value, data?.qrcode, data?.image,
-      data?.base64, data?.qrCode, data?.qr, data?.raw, data?.png,
+      data?.base64, data?.qrCode, data?.qr, data?.png,
       typeof data === "string" ? data : null,
     ];
     for (const c of candidates) {

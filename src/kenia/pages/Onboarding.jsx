@@ -35,7 +35,7 @@ const normalizeQrImage = async (raw, blockedValues = []) => {
 
 const pickQrImage = async (data, blockedValues = []) => {
   const candidates = [
-    data?.qr, data?.raw, data?.qrcode, data?.qrCode, data?.image, data?.base64, data?.png, data?.dataURL,
+    data?.qr, data?.qrcode, data?.qrCode, data?.image, data?.base64, data?.png, data?.dataURL,
     data?.data?.value, data?.data?.qrcode, data?.data?.qrCode, data?.data?.qr, data?.data?.image, data?.data?.base64,
     typeof data === "string" ? data : null,
   ];
