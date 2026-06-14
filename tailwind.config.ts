@@ -14,8 +14,11 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['Host Grotesk', 'sans-serif'],
+        sans: ['Manrope', 'system-ui', 'sans-serif'],
+        serif: ['"Cormorant Garamond"', 'Georgia', 'serif'],
+        display: ['"Cormorant Garamond"', 'Georgia', 'serif'],
       },
+
       colors: {
         border: "hsl(var(--border))",
         input: "hsl(var(--input))",
@@ -68,7 +71,18 @@ export default {
           coral: "hsl(var(--brand-coral))",
           "coral-dark": "hsl(var(--brand-coral-dark))",
         },
+        gold: {
+          50: '#FDFAF3', 100: '#F8F0DC', 200: '#EFDFB5', 300: '#E3C789',
+          400: '#D1B072', 500: '#B7924C', 600: '#9A7736', 700: '#7B5D28',
+          800: '#5E4721', 900: '#3F301A',
+        },
+        nude: {
+          50: '#FAF8F5', 100: '#F4F0EA', 200: '#E8E2D9', 300: '#D8CEC0',
+          400: '#C3B5A1', 500: '#A4927A', 600: '#81715A', 700: '#5E5241',
+          800: '#3E362A', 900: '#2B2624', 950: '#1A1614',
+        },
       },
+
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
