@@ -127,12 +127,19 @@ const extractTextMessage = (message = {}) => {
     content.extendedTextMessage?.text ||
     content.imageMessage?.caption ||
     content.videoMessage?.caption ||
+    content.buttonsResponseMessage?.selectedDisplayText ||
+    content.buttonsResponseMessage?.selectedButtonId ||
+    content.listResponseMessage?.title ||
+    content.listResponseMessage?.singleSelectReply?.selectedRowId ||
+    content.templateButtonReplyMessage?.selectedDisplayText ||
+    content.templateButtonReplyMessage?.selectedId ||
+    content.interactiveResponseMessage?.body?.text ||
     ""
   ).trim();
 };
 
 const isReplyableJid = (jid = "") => {
-  return jid.endsWith("@s.whatsapp.net") || jid.endsWith("@g.us");
+  return jid.endsWith("@s.whatsapp.net") || jid.endsWith("@c.us") || jid.endsWith("@lid") || jid.endsWith("@g.us");
 };
 
 const rememberMessage = (jid, role, content) => {
