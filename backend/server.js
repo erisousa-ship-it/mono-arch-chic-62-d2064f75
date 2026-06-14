@@ -219,28 +219,47 @@ async function generateAiReply(jid, text) {
   }
 }
 
-async function handleIncomingMessage(msg) {
+async function handleIncomingMessage(msg, upsertType = "notify") {
   const jid = msg.key?.remoteJid;
   const id = msg.key?.id;
-  if (!state.config.bot_enabled || msg.key?.fromMe || !jid || !id || !msg.message || !isReplyableJid(jid)) return;
-  if (processedMessages.has(id)) return;
-  processedMessages.add(id);
+  const fromMe = !!msg.key?.fromMe;
+  const text = extractTextMessage(msg.message);
+  const ageMs = Date.now() - messageTimestampMs(msg.messageTimestamp);
+  const info = { upsert_type: upsertType, fromMe, message_id: id, message_age_ms: ageMs };
+
+  if (!state.config.bot_enabled) return noteIgnoredMessage(jid, text, "bot_disabled", info);
+  if (fromMe) return noteIgnoredMessage(jid, text, "from_me", info);
+  if (!jid || !id) return noteIgnoredMessage(jid, text, "missing_jid_or_id", info);
+  if (!msg.message) return noteIgnoredMessage(jid, text, "empty_message", info);
+  if (!isReplyableJid(jid)) return noteIgnoredMessage(jid, text, "jid_not_replyable", info);
+  if (upsertType !== "notify" && ageMs > 120000) return noteIgnoredMessage(jid, text, "old_sync_message", info);
+  const dedupeKey = `${jid}:${id}`;
+  if (processedMessages.has(dedupeKey)) return noteIgnoredMessage(jid, text, "duplicate", info);
+  processedMessages.add(dedupeKey);
   if (processedMessages.size > 500) processedMessages.clear();
 
-  const text = extractTextMessage(msg.message);
-  if (!text) return;
+  if (!text) return noteIgnoredMessage(jid, text, "unsupported_message_type", info);
 
   try {
+    state.lastIncomingAt = Date.now();
+    state.incomingCount += 1;
+    state.lastMessageInfo = { jid, phone: jidToPhone(jid), text: text.slice(0, 160), ...info };
+    pushLog({ from_me: false, bot: false, ignored: false, contact_phone: jidToPhone(jid), text, ...info });
     await state.sock?.sendPresenceUpdate?.("composing", jid);
     const reply = await generateAiReply(jid, text);
     await state.sock?.sendMessage(jid, { text: reply }, { quoted: msg });
     state.lastAutoReplyAt = Date.now();
     state.autoReplyCount += 1;
+    pushLog({ from_me: true, bot: true, delivered: true, contact_phone: jidToPhone(jid), text: reply, quoted_message_id: id });
   } catch (e) {
     state.lastAiError = e.message;
+    state.recentFailures.unshift({ at: new Date().toISOString(), jid, text, send_error: e.message });
+    state.recentFailures = state.recentFailures.slice(0, 10);
     console.error("auto reply failed", e);
     try {
-      await state.sock?.sendMessage(jid, { text: "Tive uma instabilidade momentânea no atendimento. Pode me enviar sua mensagem novamente, por favor?" }, { quoted: msg });
+      const fallback = "Tive uma instabilidade momentânea no atendimento. Pode me enviar sua mensagem novamente, por favor?";
+      await state.sock?.sendMessage(jid, { text: fallback }, { quoted: msg });
+      pushLog({ from_me: true, bot: true, delivered: true, contact_phone: jidToPhone(jid), text: fallback, send_error: e.message, quoted_message_id: id });
     } catch {}
   } finally {
     try { await state.sock?.sendPresenceUpdate?.("paused", jid); } catch {}
@@ -314,9 +333,9 @@ async function startSock({ clearAuth = false } = {}) {
   });
 
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
-    if (seq !== startSeq || type !== "notify") return;
+    if (seq !== startSeq) return;
     for (const msg of messages || []) {
-      await handleIncomingMessage(msg);
+      await handleIncomingMessage(msg, type);
     }
   });
 
