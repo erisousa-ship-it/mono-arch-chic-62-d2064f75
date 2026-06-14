@@ -13,6 +13,15 @@ import {
 const PORT = process.env.PORT || 10000;
 const INTERNAL_TOKEN = process.env.INTERNAL_TOKEN || "";
 const AUTH_DIR = process.env.AUTH_DIR || "./auth_session";
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "https://bcafttsxvperfslgjphb.supabase.co";
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
+const AI_ROUTER_URL = (process.env.AI_ROUTER_URL || `${SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/ai-router`).replace(/\/+$/, "");
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen2.5:3b-instruct";
+
+const DEFAULT_BOT_PROMPT = `Você é a secretária jurídica da Dra. Kênia Garcia atendendo pelo WhatsApp.
+Responda sempre em português do Brasil, com tom humano, acolhedor, profissional e objetivo.
+Nunca diga que é IA, robô, chatbot ou modelo. Não use markdown extenso nem HTML.
+Faça uma pergunta por vez, mantenha continuidade pelo histórico e encaminhe para agendamento quando fizer sentido.`;
 
 const app = express();
 app.use(cors({ origin: true }));
@@ -27,13 +36,18 @@ const state = {
   connected: false,
   startingAt: 0,
   lastError: null,
+  lastAiError: null,
+  lastAutoReplyAt: null,
+  autoReplyCount: 0,
   qrAttempts: 0,
-  config: { provider: "baileys", bot_enabled: true },
+  config: { provider: "baileys", bot_enabled: true, bot_prompt: DEFAULT_BOT_PROMPT },
 };
 
 let startSeq = 0;
 let reconnectTimer = null;
 let qrWatchdogTimer = null;
+const processedMessages = new Set();
+const conversationHistory = new Map();
 
 const connectionState = () => {
   if (state.connected) return "open";
