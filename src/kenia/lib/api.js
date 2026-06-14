@@ -1282,6 +1282,8 @@ export const liveApi = axios.create({ baseURL: API });
 liveApi.interceptors.request.use((cfg) => {
   const token = localStorage.getItem("lf_token");
   if (token) cfg.headers.Authorization = `Bearer ${token}`;
+  const internalToken = localStorage.getItem("wa_conn_token");
+  if (internalToken) cfg.headers["x-internal-token"] = internalToken;
   return cfg;
 });
 
