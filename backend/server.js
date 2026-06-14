@@ -13,6 +13,15 @@ import {
 const PORT = process.env.PORT || 10000;
 const INTERNAL_TOKEN = process.env.INTERNAL_TOKEN || "";
 const AUTH_DIR = process.env.AUTH_DIR || "./auth_session";
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "https://bcafttsxvperfslgjphb.supabase.co";
+const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
+const AI_ROUTER_URL = (process.env.AI_ROUTER_URL || `${SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/ai-router`).replace(/\/+$/, "");
+const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen2.5:3b-instruct";
+
+const DEFAULT_BOT_PROMPT = `Você é a secretária jurídica da Dra. Kênia Garcia atendendo pelo WhatsApp.
+Responda sempre em português do Brasil, com tom humano, acolhedor, profissional e objetivo.
+Nunca diga que é IA, robô, chatbot ou modelo. Não use markdown extenso nem HTML.
+Faça uma pergunta por vez, mantenha continuidade pelo histórico e encaminhe para agendamento quando fizer sentido.`;
 
 const app = express();
 app.use(cors({ origin: true }));
@@ -27,13 +36,18 @@ const state = {
   connected: false,
   startingAt: 0,
   lastError: null,
+  lastAiError: null,
+  lastAutoReplyAt: null,
+  autoReplyCount: 0,
   qrAttempts: 0,
-  config: { provider: "baileys", bot_enabled: true },
+  config: { provider: "baileys", bot_enabled: true, bot_prompt: DEFAULT_BOT_PROMPT },
 };
 
 let startSeq = 0;
 let reconnectTimer = null;
 let qrWatchdogTimer = null;
+const processedMessages = new Set();
+const conversationHistory = new Map();
 
 const connectionState = () => {
   if (state.connected) return "open";
@@ -63,6 +77,89 @@ function auth(req, res, next) {
     return res.status(401).json({ error: "unauthorized" });
   }
   next();
+}
+
+const extractTextMessage = (message = {}) => {
+  const content = message.ephemeralMessage?.message || message.viewOnceMessage?.message || message;
+  return (
+    content.conversation ||
+    content.extendedTextMessage?.text ||
+    content.imageMessage?.caption ||
+    content.videoMessage?.caption ||
+    ""
+  ).trim();
+};
+
+const isReplyableJid = (jid = "") => {
+  return jid.endsWith("@s.whatsapp.net") || jid.endsWith("@g.us");
+};
+
+const rememberMessage = (jid, role, content) => {
+  const history = conversationHistory.get(jid) || [];
+  history.push({ role, content: String(content || "").slice(0, 1200) });
+  conversationHistory.set(jid, history.slice(-12));
+  return conversationHistory.get(jid);
+};
+
+async function generateAiReply(jid, text) {
+  const history = rememberMessage(jid, "user", text);
+  const messages = [
+    { role: "system", content: state.config.bot_prompt || DEFAULT_BOT_PROMPT },
+    ...history,
+  ];
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 25000);
+  try {
+    const r = await fetch(AI_ROUTER_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(SUPABASE_ANON_KEY ? { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } : {}),
+      },
+      signal: controller.signal,
+      body: JSON.stringify({ mode: "chat", provider: "ollama", messages, model: OLLAMA_MODEL }),
+    });
+    const raw = await r.text();
+    if (!r.ok) throw new Error(`ai-router_${r.status}: ${raw.slice(0, 300)}`);
+    const data = JSON.parse(raw || "{}");
+    const reply = String(data.text || data.response || "").trim();
+    if (!reply) throw new Error("ai-router_empty_response");
+    rememberMessage(jid, "assistant", reply);
+    state.lastAiError = null;
+    return reply;
+  } catch (e) {
+    const msg = e?.name === "AbortError" ? "ai-router_timeout" : e.message;
+    state.lastAiError = msg;
+    throw new Error(msg);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function handleIncomingMessage(msg) {
+  const jid = msg.key?.remoteJid;
+  const id = msg.key?.id;
+  if (!state.config.bot_enabled || msg.key?.fromMe || !jid || !id || !msg.message || !isReplyableJid(jid)) return;
+  if (processedMessages.has(id)) return;
+  processedMessages.add(id);
+  if (processedMessages.size > 500) processedMessages.clear();
+
+  const text = extractTextMessage(msg.message);
+  if (!text) return;
+
+  try {
+    await state.sock?.sendPresenceUpdate?.("composing", jid);
+    const reply = await generateAiReply(jid, text);
+    await state.sock?.sendMessage(jid, { text: reply }, { quoted: msg });
+    state.lastAutoReplyAt = Date.now();
+    state.autoReplyCount += 1;
+  } catch (e) {
+    state.lastAiError = e.message;
+    console.error("auto reply failed", e);
+  } finally {
+    try { await state.sock?.sendPresenceUpdate?.("paused", jid); } catch {}
+  }
 }
 
 async function startSock({ clearAuth = false } = {}) {
@@ -131,6 +228,13 @@ async function startSock({ clearAuth = false } = {}) {
     }
   });
 
+  sock.ev.on("messages.upsert", async ({ messages, type }) => {
+    if (seq !== startSeq || type !== "notify") return;
+    for (const msg of messages || []) {
+      await handleIncomingMessage(msg);
+    }
+  });
+
   state.sock = sock;
 }
 
@@ -148,6 +252,7 @@ app.put("/api/whatsapp/config", auth, (req, res) => {
 app.get("/api/whatsapp/diagnostics", auth, (_req, res) => {
   res.json({ ok: true, static_mode: false, checks: [
     { id: "baileys-backend", ok: true, label: "Backend Baileys ativo", msg: "Serviço WhatsApp publicado e respondendo.", hint: state.connected ? "WhatsApp conectado." : state.qrDataUrl ? "QR Code disponível para leitura." : "Se ficar inicializando por mais de 30s, gere uma nova sessão." },
+    { id: "ai-router", ok: !state.lastAiError, label: "Resposta automática IA", msg: state.lastAiError ? `Última falha: ${state.lastAiError}` : "Fluxo automático ligado ao ai-router/Ollama.", hint: state.lastAutoReplyAt ? `Última resposta enviada: ${new Date(state.lastAutoReplyAt).toLocaleString("pt-BR")}` : "Envie uma mensagem para este WhatsApp para testar a resposta automática." },
   ] });
 });
 
@@ -164,6 +269,12 @@ app.get("/api/whatsapp/baileys/status", auth, (_req, res) => {
     startingAt: state.startingAt,
     secondsWaiting,
     last_error: state.lastError,
+    bot_enabled: !!state.config.bot_enabled,
+    ai_router_url: AI_ROUTER_URL,
+    ollama_model: OLLAMA_MODEL,
+    last_ai_error: state.lastAiError,
+    last_auto_reply_at: state.lastAutoReplyAt,
+    auto_reply_count: state.autoReplyCount,
   });
 });
 
