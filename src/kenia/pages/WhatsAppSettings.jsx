@@ -69,7 +69,7 @@ export default function WhatsAppSettings() {
   const load = async () => {
     try {
       const { data } = await api.get("/whatsapp/config");
-      setCfg(data);
+      setCfg(!HAS_BACKEND && data?.provider === "baileys" ? { ...data, provider: "zapi" } : data);
     } catch {
       toast.error("Erro ao carregar configuração");
     }
@@ -531,10 +531,10 @@ export default function WhatsAppSettings() {
 
         <Card className="border-nude-200">
           <div className="p-5">
-            <Tabs value={cfg.provider} onValueChange={(v) => up("provider", v)}>
+            <Tabs value={!HAS_BACKEND && cfg.provider === "baileys" ? "zapi" : cfg.provider} onValueChange={(v) => up("provider", v)}>
               <TabsList className="grid grid-cols-4 w-full max-w-2xl">
                 <TabsTrigger value="zapi" data-testid="tab-zapi"><Zap className="w-3.5 h-3.5 mr-1.5" />Z-API</TabsTrigger>
-                <TabsTrigger value="baileys" data-testid="tab-baileys"><Smartphone className="w-3.5 h-3.5 mr-1.5" />Baileys</TabsTrigger>
+                <TabsTrigger value="baileys" disabled={!HAS_BACKEND} data-testid="tab-baileys"><Smartphone className="w-3.5 h-3.5 mr-1.5" />Baileys</TabsTrigger>
                 <TabsTrigger value="evolution" data-testid="tab-evolution"><Server className="w-3.5 h-3.5 mr-1.5" />Evolution</TabsTrigger>
                 <TabsTrigger value="meta" data-testid="tab-meta"><Building2 className="w-3.5 h-3.5 mr-1.5" />Meta Cloud</TabsTrigger>
               </TabsList>
