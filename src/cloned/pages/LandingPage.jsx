@@ -301,7 +301,7 @@ export default function LandingPage() {
         </div>
       </footer>
 
-      <AuthModal isOpen={authOpen} onClose={() => setAuthOpen(false)} mode={authMode} setMode={setAuthMode} />
+      <AuthModal open={authOpen} onClose={() => setAuthOpen(false)} mode={authMode} onModeChange={setAuthMode} />
     </div>
   );
 }
