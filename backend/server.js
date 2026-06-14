@@ -278,6 +278,49 @@ async function startSock({ clearAuth = false } = {}) {
 
 app.get("/api", (_req, res) => res.json({ ok: true, service: "kenia-whatsapp" }));
 
+// Endpoint público para verificar a conexão com o Ollama (sem auth, leitura apenas).
+app.get("/api/ai/ping", async (_req, res) => {
+  const result = {
+    ollama_base_url: OLLAMA_BASE_URL || null,
+    ollama_model: OLLAMA_MODEL,
+    configured: !!OLLAMA_BASE_URL,
+    is_public: false,
+    reachable: false,
+    tags_status: null,
+    chat_ok: false,
+    error: null,
+  };
+  if (!OLLAMA_BASE_URL) { result.error = "OLLAMA_BASE_URL não definido no Render"; return res.json(result); }
+  try {
+    const u = new URL(OLLAMA_BASE_URL);
+    result.is_public = !/^(localhost|127\.|0\.0\.0\.0|::1|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(u.hostname);
+  } catch { result.error = "OLLAMA_BASE_URL inválida"; return res.json(result); }
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    const r = await fetch(`${OLLAMA_BASE_URL}/api/tags`, { headers: { "ngrok-skip-browser-warning": "true" }, signal: ctrl.signal });
+    clearTimeout(t);
+    result.tags_status = r.status;
+    result.reachable = r.ok;
+    if (!r.ok) result.error = `tags HTTP ${r.status}`;
+  } catch (e) { result.error = `tags: ${e.message}`; return res.json(result); }
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 20000);
+    const r = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
+      signal: ctrl.signal,
+      body: JSON.stringify({ model: OLLAMA_MODEL, stream: false, messages: [{ role: "user", content: "ping" }], options: { num_predict: 8 } }),
+    });
+    clearTimeout(t);
+    const data = await r.json().catch(() => ({}));
+    result.chat_ok = r.ok && !!(data?.message?.content);
+    if (!result.chat_ok) result.error = `chat HTTP ${r.status}: ${data?.error || ""}`;
+  } catch (e) { result.error = `chat: ${e.message}`; }
+  res.json(result);
+});
+
 app.get("/api/whatsapp/config", auth, (_req, res) => {
   res.json(state.config);
 });
