@@ -139,36 +139,38 @@ app.put("/api/whatsapp/config", auth, (req, res) => {
 
 app.get("/api/whatsapp/diagnostics", auth, (_req, res) => {
   res.json({ ok: true, static_mode: false, checks: [
-    { id: "baileys-backend", ok: true, label: "Backend Baileys ativo", msg: "Serviço WhatsApp publicado e respondendo.", hint: state.connected ? "WhatsApp conectado." : "Gere/escaneie o QR Code para conectar." },
+    { id: "baileys-backend", ok: true, label: "Backend Baileys ativo", msg: "Serviço WhatsApp publicado e respondendo.", hint: state.connected ? "WhatsApp conectado." : state.qrDataUrl ? "QR Code disponível para leitura." : "Se ficar inicializando por mais de 30s, gere uma nova sessão." },
   ] });
 });
 
 app.post("/api/whatsapp/test-connection", auth, (_req, res) => {
-  res.json({ connected: state.connected, provider: "baileys", state: state.connected ? "open" : state.qrDataUrl ? "qr" : "connecting" });
+  res.json({ connected: state.connected, provider: "baileys", state: connectionState(), error: state.lastError });
 });
 
 app.get("/api/whatsapp/baileys/status", auth, (_req, res) => {
+  const secondsWaiting = state.startingAt ? Math.floor((Date.now() - state.startingAt) / 1000) : 0;
   res.json({
     connected: state.connected,
-    state: state.connected ? "open" : state.qrDataUrl ? "qr" : "connecting",
+    state: connectionState(),
     hasQr: !!state.qrDataUrl,
     startingAt: state.startingAt,
+    secondsWaiting,
+    last_error: state.lastError,
   });
 });
 
 app.get("/api/whatsapp/qr", auth, (_req, res) => {
-  res.json({ qr: state.qrDataUrl, raw: state.qr });
+  res.json({ qr: state.qrDataUrl, raw: state.qr, state: connectionState(), last_error: state.lastError });
 });
 
 app.get("/api/whatsapp/baileys/qr", auth, (_req, res) => {
-  res.json({ qr: state.qrDataUrl, raw: state.qr, state: state.connected ? "open" : state.qrDataUrl ? "qr" : "connecting" });
+  res.json({ qr: state.qrDataUrl, raw: state.qr, state: connectionState(), last_error: state.lastError });
 });
 
 app.post("/api/whatsapp/baileys/restart", auth, async (_req, res) => {
   try {
-    try { state.sock?.end?.(new Error("restart")); } catch {}
     await startSock();
-    res.json({ ok: true });
+    res.json({ ok: true, connected: state.connected, state: connectionState(), qr: state.qrDataUrl });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -176,9 +178,17 @@ app.post("/api/whatsapp/baileys/restart", auth, async (_req, res) => {
 
 app.post("/api/whatsapp/baileys/reconnect", auth, async (_req, res) => {
   try {
-    try { state.sock?.end?.(new Error("reconnect")); } catch {}
     await startSock();
-    res.json({ ok: true, connected: state.connected, state: state.connected ? "open" : "connecting" });
+    res.json({ ok: true, connected: state.connected, state: connectionState(), qr: state.qrDataUrl });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post("/api/whatsapp/baileys/reset-session", auth, async (_req, res) => {
+  try {
+    await startSock({ clearAuth: true });
+    res.json({ ok: true, connected: false, state: connectionState(), qr: state.qrDataUrl });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
