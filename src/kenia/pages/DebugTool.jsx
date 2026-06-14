@@ -413,6 +413,71 @@ export default function DebugTool() {
                 </div>
               )}
             </TabsContent>
+
+            <TabsContent value="ai" className="mt-6">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <div className="text-sm font-semibold">Provedores de IA (ai-router)</div>
+                  <div className="text-xs text-nude-500">Verifica se Emergent, Ollama e Lovable estão configurados e respondendo.</div>
+                </div>
+                <Button size="sm" variant="outline" onClick={refreshAiStatus} disabled={aiLoadingStatus}>
+                  {aiLoadingStatus ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Activity className="w-4 h-4 mr-2" />}
+                  Recarregar
+                </Button>
+              </div>
+
+              {aiStatus?.error && (
+                <div className="mb-4 p-3 rounded border border-rose-300 bg-rose-50 text-sm text-rose-700">
+                  Falha ao consultar ai-router: {aiStatus.error}
+                  <div className="text-xs mt-1">Verifique se a edge function <code>ai-router</code> foi deployada.</div>
+                </div>
+              )}
+
+              <div className="space-y-2">
+                {["emergent", "ollama", "lovable"].map((p) => {
+                  const configured = aiStatus && aiStatus[p];
+                  const url = aiStatus?.[`${p}_url`];
+                  const result = aiResults[p];
+                  return (
+                    <div key={p} className="flex items-center justify-between gap-3 p-3 border border-nude-200 rounded bg-white">
+                      <div className="flex items-center gap-3 min-w-0">
+                        {configured == null ? (
+                          <Loader2 className="w-5 h-5 text-nude-400" />
+                        ) : configured ? (
+                          <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                        ) : (
+                          <XCircle className="w-5 h-5 text-rose-500" />
+                        )}
+                        <div className="min-w-0">
+                          <div className="font-medium capitalize">{p}</div>
+                          <div className="text-xs text-nude-500 truncate">
+                            {configured == null ? "—" : configured ? (url || "configurado") : "não configurado"}
+                          </div>
+                          {result && (
+                            <div className={`text-xs mt-1 ${result.ok ? "text-emerald-700" : "text-rose-600"}`}>
+                              {result.ok ? "Ping OK" : `Erro: ${result.error}`}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <Button size="sm" variant="outline" disabled={!configured || aiTesting[p]} onClick={() => testAiProvider(p)}>
+                        {aiTesting[p] ? <Loader2 className="w-4 h-4 animate-spin" /> : "Testar"}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
+
+              <div className="mt-6 text-xs text-nude-500 space-y-1">
+                <div className="font-semibold text-nude-700">Como configurar Ollama:</div>
+                <ol className="list-decimal pl-5 space-y-1">
+                  <li>No seu PC: <code>ollama serve</code> e <code>ollama pull llama3.1</code></li>
+                  <li>Exponha com ngrok: <code>ngrok http 11434</code></li>
+                  <li>Atualize o secret <code>OLLAMA_BASE_URL</code> com a URL do ngrok</li>
+                  <li>Clique em "Testar" — deve retornar Ping OK.</li>
+                </ol>
+              </div>
+            </TabsContent>
           </Tabs>
         </Card>
       </div>
