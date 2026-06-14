@@ -2,3 +2,6 @@ project_id = "kzlxysxvvlupjtrmxqmb"
 
 [auth]
 minimum_password_length = 3
+
+[functions.whatsapp-zapi]
+verify_jwt = false
