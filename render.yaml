@@ -2,6 +2,7 @@ services:
   - type: web
     name: jatai-app
     runtime: docker
+    rootDir: .
     plan: free
     dockerfilePath: ./Dockerfile
     dockerContext: .
