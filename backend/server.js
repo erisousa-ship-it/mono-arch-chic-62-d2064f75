@@ -38,8 +38,16 @@ const state = {
   startingAt: 0,
   lastError: null,
   lastAiError: null,
+  lastIncomingAt: null,
+  lastIgnoredAt: null,
+  lastIgnoredReason: null,
+  lastMessageInfo: null,
+  incomingCount: 0,
+  ignoredCount: 0,
   lastAutoReplyAt: null,
   autoReplyCount: 0,
+  logs: [],
+  recentFailures: [],
   qrAttempts: 0,
   config: { provider: "baileys", bot_enabled: true, bot_prompt: DEFAULT_BOT_PROMPT },
 };
@@ -49,6 +57,38 @@ let reconnectTimer = null;
 let qrWatchdogTimer = null;
 const processedMessages = new Set();
 const conversationHistory = new Map();
+
+const pushLog = (entry = {}) => {
+  state.logs.unshift({
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    created_at: new Date().toISOString(),
+    provider: "baileys",
+    ...entry,
+  });
+  state.logs = state.logs.slice(0, 300);
+};
+
+const jidToPhone = (jid = "") => jid.split("@")[0]?.split(":")[0] || jid;
+
+const messageTimestampMs = (value) => {
+  if (!value) return Date.now();
+  if (typeof value === "number") return value < 20_000_000_000 ? value * 1000 : value;
+  if (typeof value === "bigint") return Number(value) * 1000;
+  if (typeof value?.toNumber === "function") {
+    const n = value.toNumber();
+    return n < 20_000_000_000 ? n * 1000 : n;
+  }
+  if (typeof value?.low === "number") return value.low * 1000;
+  return Date.now();
+};
+
+const noteIgnoredMessage = (jid, text, reason, extra = {}) => {
+  state.lastIgnoredAt = Date.now();
+  state.lastIgnoredReason = reason;
+  state.ignoredCount += 1;
+  state.lastMessageInfo = { jid, phone: jidToPhone(jid), text: String(text || "").slice(0, 160), reason, ...extra };
+  pushLog({ from_me: !!extra.fromMe, bot: false, ignored: true, ignore_reason: reason, contact_phone: jidToPhone(jid), text: text || reason, ...extra });
+};
 
 const connectionState = () => {
   if (state.connected) return "open";
