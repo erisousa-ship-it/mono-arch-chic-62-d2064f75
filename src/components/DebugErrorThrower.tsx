@@ -1,32 +1,8 @@
-import { useEffect, useState } from "react";
-
 /**
- * DebugErrorThrower
+ * DebugErrorThrower (desativado)
  *
- * Componente sem UI. Escuta o evento global "lovable-debug-error" e, ao receber
- * uma mensagem, lança um Error DURANTE O RENDER para que o erro escape ao
- * overlay global "Try to Fix" da Lovable.
- *
- * NÃO envolver em ErrorBoundary / Suspense / try-catch.
- * NÃO trocar o throw por console.error, toast, log ou setTimeout.
+ * Anteriormente lançava erros em render a partir de eventos globais, o que
+ * causava telas em branco e travava o app. Mantido como no-op para preservar
+ * importações existentes.
  */
-export const DebugErrorThrower = () => {
-  const [message, setMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<string>).detail;
-      if (typeof detail === "string" && detail.length > 0) {
-        setMessage(detail);
-      }
-    };
-    window.addEventListener("lovable-debug-error", handler as EventListener);
-    return () => window.removeEventListener("lovable-debug-error", handler as EventListener);
-  }, []);
-
-  if (message) {
-    throw new Error(message);
-  }
-
-  return null;
-};
+export const DebugErrorThrower = () => null;
