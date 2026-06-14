@@ -1300,7 +1300,9 @@ liveApi.interceptors.request.use((cfg) => {
 liveApi.interceptors.response.use(
   (r) => r,
   (err) => {
-    if (err.response?.status === 401) {
+    const requestUrl = String(err.config?.url || "");
+    const isWhatsAppBackendAuth = requestUrl.startsWith("/whatsapp/");
+    if (err.response?.status === 401 && !isWhatsAppBackendAuth) {
       localStorage.removeItem("lf_token");
       localStorage.removeItem("lf_user");
       if (!window.location.pathname.startsWith("/login") && window.location.pathname !== "/") {
