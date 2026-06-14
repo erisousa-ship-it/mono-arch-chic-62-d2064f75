@@ -38,8 +38,16 @@ const state = {
   startingAt: 0,
   lastError: null,
   lastAiError: null,
+  lastIncomingAt: null,
+  lastIgnoredAt: null,
+  lastIgnoredReason: null,
+  lastMessageInfo: null,
+  incomingCount: 0,
+  ignoredCount: 0,
   lastAutoReplyAt: null,
   autoReplyCount: 0,
+  logs: [],
+  recentFailures: [],
   qrAttempts: 0,
   config: { provider: "baileys", bot_enabled: true, bot_prompt: DEFAULT_BOT_PROMPT },
 };
@@ -49,6 +57,38 @@ let reconnectTimer = null;
 let qrWatchdogTimer = null;
 const processedMessages = new Set();
 const conversationHistory = new Map();
+
+const pushLog = (entry = {}) => {
+  state.logs.unshift({
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    created_at: new Date().toISOString(),
+    provider: "baileys",
+    ...entry,
+  });
+  state.logs = state.logs.slice(0, 300);
+};
+
+const jidToPhone = (jid = "") => jid.split("@")[0]?.split(":")[0] || jid;
+
+const messageTimestampMs = (value) => {
+  if (!value) return Date.now();
+  if (typeof value === "number") return value < 20_000_000_000 ? value * 1000 : value;
+  if (typeof value === "bigint") return Number(value) * 1000;
+  if (typeof value?.toNumber === "function") {
+    const n = value.toNumber();
+    return n < 20_000_000_000 ? n * 1000 : n;
+  }
+  if (typeof value?.low === "number") return value.low * 1000;
+  return Date.now();
+};
+
+const noteIgnoredMessage = (jid, text, reason, extra = {}) => {
+  state.lastIgnoredAt = Date.now();
+  state.lastIgnoredReason = reason;
+  state.ignoredCount += 1;
+  state.lastMessageInfo = { jid, phone: jidToPhone(jid), text: String(text || "").slice(0, 160), reason, ...extra };
+  pushLog({ from_me: !!extra.fromMe, bot: false, ignored: true, ignore_reason: reason, contact_phone: jidToPhone(jid), text: text || reason, ...extra });
+};
 
 const connectionState = () => {
   if (state.connected) return "open";
@@ -87,12 +127,19 @@ const extractTextMessage = (message = {}) => {
     content.extendedTextMessage?.text ||
     content.imageMessage?.caption ||
     content.videoMessage?.caption ||
+    content.buttonsResponseMessage?.selectedDisplayText ||
+    content.buttonsResponseMessage?.selectedButtonId ||
+    content.listResponseMessage?.title ||
+    content.listResponseMessage?.singleSelectReply?.selectedRowId ||
+    content.templateButtonReplyMessage?.selectedDisplayText ||
+    content.templateButtonReplyMessage?.selectedId ||
+    content.interactiveResponseMessage?.body?.text ||
     ""
   ).trim();
 };
 
 const isReplyableJid = (jid = "") => {
-  return jid.endsWith("@s.whatsapp.net") || jid.endsWith("@g.us");
+  return jid.endsWith("@s.whatsapp.net") || jid.endsWith("@c.us") || jid.endsWith("@lid") || jid.endsWith("@g.us");
 };
 
 const rememberMessage = (jid, role, content) => {
@@ -172,28 +219,47 @@ async function generateAiReply(jid, text) {
   }
 }
 
-async function handleIncomingMessage(msg) {
+async function handleIncomingMessage(msg, upsertType = "notify") {
   const jid = msg.key?.remoteJid;
   const id = msg.key?.id;
-  if (!state.config.bot_enabled || msg.key?.fromMe || !jid || !id || !msg.message || !isReplyableJid(jid)) return;
-  if (processedMessages.has(id)) return;
-  processedMessages.add(id);
+  const fromMe = !!msg.key?.fromMe;
+  const text = extractTextMessage(msg.message);
+  const ageMs = Date.now() - messageTimestampMs(msg.messageTimestamp);
+  const info = { upsert_type: upsertType, fromMe, message_id: id, message_age_ms: ageMs };
+
+  if (!state.config.bot_enabled) return noteIgnoredMessage(jid, text, "bot_disabled", info);
+  if (fromMe) return noteIgnoredMessage(jid, text, "from_me", info);
+  if (!jid || !id) return noteIgnoredMessage(jid, text, "missing_jid_or_id", info);
+  if (!msg.message) return noteIgnoredMessage(jid, text, "empty_message", info);
+  if (!isReplyableJid(jid)) return noteIgnoredMessage(jid, text, "jid_not_replyable", info);
+  if (upsertType !== "notify" && ageMs > 120000) return noteIgnoredMessage(jid, text, "old_sync_message", info);
+  const dedupeKey = `${jid}:${id}`;
+  if (processedMessages.has(dedupeKey)) return noteIgnoredMessage(jid, text, "duplicate", info);
+  processedMessages.add(dedupeKey);
   if (processedMessages.size > 500) processedMessages.clear();
 
-  const text = extractTextMessage(msg.message);
-  if (!text) return;
+  if (!text) return noteIgnoredMessage(jid, text, "unsupported_message_type", info);
 
   try {
+    state.lastIncomingAt = Date.now();
+    state.incomingCount += 1;
+    state.lastMessageInfo = { jid, phone: jidToPhone(jid), text: text.slice(0, 160), ...info };
+    pushLog({ from_me: false, bot: false, ignored: false, contact_phone: jidToPhone(jid), text, ...info });
     await state.sock?.sendPresenceUpdate?.("composing", jid);
     const reply = await generateAiReply(jid, text);
     await state.sock?.sendMessage(jid, { text: reply }, { quoted: msg });
     state.lastAutoReplyAt = Date.now();
     state.autoReplyCount += 1;
+    pushLog({ from_me: true, bot: true, delivered: true, contact_phone: jidToPhone(jid), text: reply, quoted_message_id: id });
   } catch (e) {
     state.lastAiError = e.message;
+    state.recentFailures.unshift({ at: new Date().toISOString(), jid, text, send_error: e.message });
+    state.recentFailures = state.recentFailures.slice(0, 10);
     console.error("auto reply failed", e);
     try {
-      await state.sock?.sendMessage(jid, { text: "Tive uma instabilidade momentânea no atendimento. Pode me enviar sua mensagem novamente, por favor?" }, { quoted: msg });
+      const fallback = "Tive uma instabilidade momentânea no atendimento. Pode me enviar sua mensagem novamente, por favor?";
+      await state.sock?.sendMessage(jid, { text: fallback }, { quoted: msg });
+      pushLog({ from_me: true, bot: true, delivered: true, contact_phone: jidToPhone(jid), text: fallback, send_error: e.message, quoted_message_id: id });
     } catch {}
   } finally {
     try { await state.sock?.sendPresenceUpdate?.("paused", jid); } catch {}
@@ -267,9 +333,9 @@ async function startSock({ clearAuth = false } = {}) {
   });
 
   sock.ev.on("messages.upsert", async ({ messages, type }) => {
-    if (seq !== startSeq || type !== "notify") return;
+    if (seq !== startSeq) return;
     for (const msg of messages || []) {
-      await handleIncomingMessage(msg);
+      await handleIncomingMessage(msg, type);
     }
   });
 
@@ -334,7 +400,33 @@ app.get("/api/whatsapp/diagnostics", auth, (_req, res) => {
   res.json({ ok: true, static_mode: false, checks: [
     { id: "baileys-backend", ok: true, label: "Backend Baileys ativo", msg: "Serviço WhatsApp publicado e respondendo.", hint: state.connected ? "WhatsApp conectado." : state.qrDataUrl ? "QR Code disponível para leitura." : "Se ficar inicializando por mais de 30s, gere uma nova sessão." },
     { id: "ollama", ok: !state.lastAiError && (!!OLLAMA_BASE_URL || !!AI_ROUTER_URL), label: "Resposta automática IA", msg: state.lastAiError ? `Última falha: ${state.lastAiError}` : (OLLAMA_BASE_URL ? "Backend ligado direto ao Ollama." : "Backend ligado ao ai-router/Ollama."), hint: state.lastAutoReplyAt ? `Última resposta enviada: ${new Date(state.lastAutoReplyAt).toLocaleString("pt-BR")}` : "Envie uma mensagem para este WhatsApp para testar a resposta automática." },
+    { id: "incoming-messages", ok: !!state.lastIncomingAt || state.autoReplyCount > 0, label: "Mensagens recebidas pelo robô", msg: state.lastIncomingAt ? `Última mensagem recebida: ${new Date(state.lastIncomingAt).toLocaleString("pt-BR")}` : "Nenhuma mensagem de cliente chegou ao robô ainda.", hint: state.lastIgnoredReason ? `Último bloqueio: ${state.lastIgnoredReason}` : "Teste enviando mensagem de outro número, não do próprio WhatsApp conectado." },
   ] });
+});
+
+app.get("/api/whatsapp/logs", auth, (req, res) => {
+  const limit = Math.min(Number(req.query.limit || 200), 300);
+  res.json({ logs: state.logs.slice(0, limit) });
+});
+
+app.get("/api/whatsapp/bot-delivery-stats", auth, (_req, res) => {
+  const totalBotReplies = state.logs.filter((l) => l.bot).length;
+  const delivered = state.logs.filter((l) => l.bot && l.delivered !== false).length;
+  const failed = state.recentFailures.length;
+  res.json({
+    tracked_total: state.logs.length,
+    total_bot_replies: totalBotReplies,
+    delivered,
+    failed,
+    delivery_rate: totalBotReplies ? Math.round((delivered / totalBotReplies) * 100) : 0,
+    recent_failures: state.recentFailures,
+    last_incoming_at: state.lastIncomingAt,
+    last_ignored_at: state.lastIgnoredAt,
+    last_ignored_reason: state.lastIgnoredReason,
+    incoming_count: state.incomingCount,
+    ignored_count: state.ignoredCount,
+    auto_reply_count: state.autoReplyCount,
+  });
 });
 
 app.post("/api/whatsapp/test-connection", auth, (_req, res) => {
@@ -355,6 +447,12 @@ app.get("/api/whatsapp/baileys/status", auth, (_req, res) => {
     ai_router_url: AI_ROUTER_URL,
     ollama_model: OLLAMA_MODEL,
     last_ai_error: state.lastAiError,
+    last_incoming_at: state.lastIncomingAt,
+    last_ignored_at: state.lastIgnoredAt,
+    last_ignored_reason: state.lastIgnoredReason,
+    last_message_info: state.lastMessageInfo,
+    incoming_count: state.incomingCount,
+    ignored_count: state.ignoredCount,
     last_auto_reply_at: state.lastAutoReplyAt,
     auto_reply_count: state.autoReplyCount,
   });
