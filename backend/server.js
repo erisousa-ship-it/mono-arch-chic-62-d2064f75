@@ -400,7 +400,33 @@ app.get("/api/whatsapp/diagnostics", auth, (_req, res) => {
   res.json({ ok: true, static_mode: false, checks: [
     { id: "baileys-backend", ok: true, label: "Backend Baileys ativo", msg: "Serviço WhatsApp publicado e respondendo.", hint: state.connected ? "WhatsApp conectado." : state.qrDataUrl ? "QR Code disponível para leitura." : "Se ficar inicializando por mais de 30s, gere uma nova sessão." },
     { id: "ollama", ok: !state.lastAiError && (!!OLLAMA_BASE_URL || !!AI_ROUTER_URL), label: "Resposta automática IA", msg: state.lastAiError ? `Última falha: ${state.lastAiError}` : (OLLAMA_BASE_URL ? "Backend ligado direto ao Ollama." : "Backend ligado ao ai-router/Ollama."), hint: state.lastAutoReplyAt ? `Última resposta enviada: ${new Date(state.lastAutoReplyAt).toLocaleString("pt-BR")}` : "Envie uma mensagem para este WhatsApp para testar a resposta automática." },
+    { id: "incoming-messages", ok: !!state.lastIncomingAt || state.autoReplyCount > 0, label: "Mensagens recebidas pelo robô", msg: state.lastIncomingAt ? `Última mensagem recebida: ${new Date(state.lastIncomingAt).toLocaleString("pt-BR")}` : "Nenhuma mensagem de cliente chegou ao robô ainda.", hint: state.lastIgnoredReason ? `Último bloqueio: ${state.lastIgnoredReason}` : "Teste enviando mensagem de outro número, não do próprio WhatsApp conectado." },
   ] });
+});
+
+app.get("/api/whatsapp/logs", auth, (req, res) => {
+  const limit = Math.min(Number(req.query.limit || 200), 300);
+  res.json({ logs: state.logs.slice(0, limit) });
+});
+
+app.get("/api/whatsapp/bot-delivery-stats", auth, (_req, res) => {
+  const totalBotReplies = state.logs.filter((l) => l.bot).length;
+  const delivered = state.logs.filter((l) => l.bot && l.delivered !== false).length;
+  const failed = state.recentFailures.length;
+  res.json({
+    tracked_total: state.logs.length,
+    total_bot_replies: totalBotReplies,
+    delivered,
+    failed,
+    delivery_rate: totalBotReplies ? Math.round((delivered / totalBotReplies) * 100) : 0,
+    recent_failures: state.recentFailures,
+    last_incoming_at: state.lastIncomingAt,
+    last_ignored_at: state.lastIgnoredAt,
+    last_ignored_reason: state.lastIgnoredReason,
+    incoming_count: state.incomingCount,
+    ignored_count: state.ignoredCount,
+    auto_reply_count: state.autoReplyCount,
+  });
 });
 
 app.post("/api/whatsapp/test-connection", auth, (_req, res) => {
@@ -421,6 +447,12 @@ app.get("/api/whatsapp/baileys/status", auth, (_req, res) => {
     ai_router_url: AI_ROUTER_URL,
     ollama_model: OLLAMA_MODEL,
     last_ai_error: state.lastAiError,
+    last_incoming_at: state.lastIncomingAt,
+    last_ignored_at: state.lastIgnoredAt,
+    last_ignored_reason: state.lastIgnoredReason,
+    last_message_info: state.lastMessageInfo,
+    incoming_count: state.incomingCount,
+    ignored_count: state.ignoredCount,
     last_auto_reply_at: state.lastAutoReplyAt,
     auto_reply_count: state.autoReplyCount,
   });
