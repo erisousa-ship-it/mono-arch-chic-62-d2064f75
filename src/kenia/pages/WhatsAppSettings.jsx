@@ -711,6 +711,19 @@ export default function WhatsAppSettings() {
                           Reconectar serviço
                         </Button>
                       )}
+                      {!baileysStatus?.connected && baileysStatus?.state !== "static" && hasBackend() && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={baileysResetSession}
+                          disabled={baileysLoggingOut}
+                          className="text-rose-700 hover:text-rose-800 hover:bg-rose-50 border-rose-300"
+                          data-testid="baileys-reset-session"
+                        >
+                          {baileysLoggingOut ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <QrCode className="w-3.5 h-3.5 mr-1.5" />}
+                          Nova sessão / QR limpo
+                        </Button>
+                      )}
                       {baileysStatus?.connected && (
                         <Button
                           variant="outline"
