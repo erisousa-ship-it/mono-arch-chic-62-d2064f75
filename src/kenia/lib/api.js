@@ -1363,7 +1363,7 @@ export const api = HAS_BACKEND
         const [path] = String(url).split("?");
         if (cloudFirstGetPaths.has(path)) return staticGet(url, config);
         try {
-          const res = await liveApi.get(url, config);
+          const res = await liveRequest("get", url, config);
           if (fallbackToStaticGetPaths.has(path) && isEmptyPayload(res?.data)) {
             return staticGet(url, config);
           }
@@ -1383,16 +1383,16 @@ export const api = HAS_BACKEND
         if (cloudFirstPostPaths.has(path)) return staticPost(url, body);
         if (path === "/chat/message") return staticPost(url, body);
         if (liveFirstWithStaticFallbackPostPaths.has(path)) {
-          return liveApi.post(url, body, config).catch(() => staticPost(url, body));
+          return liveRequest("post", url, body, config).catch(() => staticPost(url, body));
         }
         if (fallbackToStaticPostPaths.has(path)) {
-          return liveApi.post(url, body, config).catch(() => staticPost(url, body));
+          return liveRequest("post", url, body, config).catch(() => staticPost(url, body));
         }
-        return liveApi.post(url, body, config);
+        return liveRequest("post", url, body, config);
       },
-      put: liveApi.put.bind(liveApi),
-      patch: (url, body, config) => String(url).split("?")[0].startsWith("/legal-deadlines/") ? staticPatch(url, body) : liveApi.patch(url, body, config),
-      delete: (url, config) => String(url).split("?")[0].startsWith("/legal-deadlines/") ? staticDelete(url) : liveApi.delete(url, config),
+      put: (url, body, config) => liveRequest("put", url, body, config),
+      patch: (url, body, config) => String(url).split("?")[0].startsWith("/legal-deadlines/") ? staticPatch(url, body) : liveRequest("patch", url, body, config),
+      delete: (url, config) => String(url).split("?")[0].startsWith("/legal-deadlines/") ? staticDelete(url) : liveRequest("delete", url, config),
     }
   : {
       get: async (url, config) => {
