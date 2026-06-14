@@ -118,7 +118,7 @@ async function generateAiReply(jid, text) {
         ...(SUPABASE_ANON_KEY ? { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } : {}),
       },
       signal: controller.signal,
-      body: JSON.stringify({ mode: "chat", messages, model: OLLAMA_MODEL }),
+      body: JSON.stringify({ mode: "chat", provider: "ollama", messages, model: OLLAMA_MODEL }),
     });
     const raw = await r.text();
     if (!r.ok) throw new Error(`ai-router_${r.status}: ${raw.slice(0, 300)}`);

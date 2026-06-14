@@ -141,7 +141,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const { mode = 'chat', prompt = '', messages, model, action } = body;
+    const { mode = 'chat', prompt = '', messages, model, action, provider } = body;
 
     if (action === 'status') {
       const ollamaUrl = inspectPublicUrl(OLLAMA_URL);
@@ -181,11 +181,13 @@ Deno.serve(async (req) => {
     }
 
     const msgs = messages ?? [{ role: 'user', content: prompt }];
-    const result = await runChain([
-      () => tryEmergentChat(msgs, model),
-      () => tryOllamaChat(msgs, model),
-      () => tryLovableChat(msgs),
-    ]);
+    const result = provider === 'ollama'
+      ? await tryOllamaChat(msgs, model)
+      : await runChain([
+        () => tryEmergentChat(msgs, model),
+        () => tryOllamaChat(msgs, model),
+        () => tryLovableChat(msgs),
+      ]);
     return Response.json(result, { headers: corsHeaders });
   } catch (e) {
     return new Response(JSON.stringify({ error: (e as Error).message }), {
