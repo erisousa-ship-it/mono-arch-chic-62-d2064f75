@@ -92,7 +92,7 @@ const extractTextMessage = (message = {}) => {
 };
 
 const isReplyableJid = (jid = "") => {
-  return jid.endsWith("@s.whatsapp.net") || jid.endsWith("@g.us");
+  return jid.endsWith("@s.whatsapp.net") || jid.endsWith("@lid") || jid.endsWith("@g.us");
 };
 
 const rememberMessage = (jid, role, content) => {
