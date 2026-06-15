@@ -221,6 +221,14 @@ const buildTemporalSystemContext = () => {
   return `CONTEXTO TEMPORAL OBRIGATÓRIO: agora em Brasília/America/Sao_Paulo é ${now.br} (data ISO ${now.date}, hora ${now.time}). Use esta data para responder perguntas de data/hora e para converter termos como hoje/amanhã/segunda em agendamentos futuros.`;
 };
 
+const userAskedTemporalInfo = (text = "") =>
+  /\b(que\s+horas|qual\s+(?:é\s+)?(?:a\s+)?hora|hor[áa]rio\s+atual|agora\s+s[aã]o|data\s+de\s+hoje|qual\s+(?:é\s+)?(?:a\s+)?data|que\s+data|que\s+dia\s+(?:é|estamos|s[aã]o|de\s+hoje)|hoje\s+[ée]\s+que\s+dia|dia\s+da\s+semana|dia\s+de\s+hoje|que\s+m[eê]s|qual\s+(?:o\s+)?(?:dia|m[eê]s|ano))\b/i.test(String(text || ""));
+
+const buildTemporalAnswer = () => {
+  const now = getSaoPauloNow();
+  return `Hoje é ${now.br}.`;
+};
+
 const parseImagePayload = (data = {}) => {
   const item = data?.data?.[0] || {};
   const b64 = item.b64_json || data.image_base64 || data.b64_json;
@@ -299,6 +307,11 @@ async function generateDirectOllamaReply(messages) {
 
 async function generateAiReply(jid, text) {
   const history = rememberMessage(jid, "user", text);
+  if (userAskedTemporalInfo(text)) {
+    const temporalReply = buildTemporalAnswer();
+    rememberMessage(jid, "assistant", temporalReply);
+    return temporalReply;
+  }
   const messages = [
     { role: "system", content: `${state.config.bot_prompt || DEFAULT_BOT_PROMPT}\n\n${buildTemporalSystemContext()}` },
     ...history,
