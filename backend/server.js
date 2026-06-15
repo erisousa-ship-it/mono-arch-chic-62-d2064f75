@@ -53,7 +53,8 @@ Ao ter os dados essenciais (nome, data, hora), CONFIRME em texto natural (ex.: "
 <AGENDAMENTO>
 {"nome":"...","telefone":"...","email":"...","cidade":"...","area_juridica":"...","resumo_caso":"...","data_agendamento":"YYYY-MM-DD","horario_agendamento":"HH:MM"}
 </AGENDAMENTO>
-O bloco é interno e será removido antes de chegar ao cliente; ele registra automaticamente a consulta no painel da Dra. Kênia. Sem esse bloco, o agendamento NÃO é registrado.`;
+O bloco é interno e será removido antes de chegar ao cliente; ele registra automaticamente a consulta no painel da Dra. Kênia. Sem esse bloco, o agendamento NÃO é registrado.
+Depois que houver confirmação de consulta no histórico ("consulta confirmada", "consulta agendada", "agendamento registrado" ou bloco <AGENDAMENTO>), o agendamento está FECHADO: não ofereça novos horários, não pergunte se deseja agendar e não reinicie a coleta de data/hora. Só fale em novos horários se o cliente pedir claramente para reagendar/remarcar/alterar/cancelar.`;
 
 const app = express();
 app.use(cors({ origin: true }));

@@ -113,6 +113,51 @@ const parseAgendamentoBlock = (text) => {
   }
 };
 
+const isScheduleChangeRequest = (text) =>
+  /\b(reagendar|remarcar|alterar|trocar|mudar|adiar|antecipar|cancelar|desmarcar)\b/i.test(String(text || ""));
+
+const isSimpleConfirmation = (text) =>
+  /^(sim|s|ok|okay|certo|confirmo|confirmado|pode ser|isso|isso mesmo|esse mesmo|perfeito|fechado|combinado|claro)\.?$/i.test(String(text || "").trim());
+
+const hasScheduleOffer = (text) =>
+  /\b(?:deseja|quer|queria|gostaria|posso|podemos|vamos)\b[\s\S]{0,90}\b(?:agendar|marcar|encaixar|consulta|hor[aá]rio)\b/i.test(String(text || "")) ||
+  /\b(?:tenho|temos)\s+(?:estes|esses|alguns)?\s*hor[aá]rios\b/i.test(String(text || "")) ||
+  /\bqual\s+(?:hor[aá]rio|data|dia)\s+prefere\b/i.test(String(text || ""));
+
+const inferConfirmedAppointment = (list = []) => {
+  const assistantMessages = (Array.isArray(list) ? list : []).filter((m) => m.role !== "user").reverse();
+  for (const item of assistantMessages) {
+    const content = String(item?.content || "");
+    if (!/(consulta|agendamento).{0,80}(agendad|confirmad|registrad|salv)/i.test(content) && !/link da sala/i.test(content)) continue;
+    const meetUrl = content.match(/https?:\/\/[^\s)]+/i)?.[0] || "";
+    const human =
+      content.match(/agendada\s+para\s+([^\n(]+(?:\([^\n)]*\))?)/i)?.[1]?.trim() ||
+      content.match(/confirmad[oa]:?\s*([^\n.]+)/i)?.[1]?.trim() ||
+      "a data e horário combinados";
+    return { human, meetUrl, duration: 60 };
+  }
+  return null;
+};
+
+const buildAlreadyConfirmedMessage = (appointment) => {
+  const when = appointment?.human || "a data e horário combinados";
+  const link = appointment?.meetUrl ? `\n\n🔗 Link da sala: ${appointment.meetUrl}` : "";
+  return `✅ Sua consulta já está confirmada para ${when}.${link}\n\nSe precisar alterar ou cancelar, me avise; caso contrário, não é necessário agendar de novo.`;
+};
+
+const stripScheduleOffersAfterConfirmation = (reply, appointment) => {
+  const text = String(reply || "").replace(/<AGENDAMENTO>[\s\S]*?<\/AGENDAMENTO>/gi, "").trim();
+  if (!hasScheduleOffer(text)) return text;
+  const kept = text
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter((part) => !hasScheduleOffer(part))
+    .join(" ")
+    .trim();
+  return kept || buildAlreadyConfirmedMessage(appointment);
+};
+
 const extractScheduleIntent = (text) => {
   const lower = text.toLowerCase();
   if (!SCHEDULE_REGEX.test(lower)) return null;
@@ -294,6 +339,7 @@ export default function ChatIA() {
   const [playingIdx, setPlayingIdx] = useState(null);
   const [scheduler, setScheduler] = useState(null);
   const [scheduling, setScheduling] = useState(false);
+  const [confirmedAppointment, setConfirmedAppointment] = useState(persisted?.confirmedAppointment || null);
   const [leadId, setLeadId] = useState(persisted?.leadId || null);
   const [showAnalysisPanel, setShowAnalysisPanel] = useState(true);
   const [activeSpeaker, setActiveSpeaker] = useState(persisted?.activeSpeaker || ASSISTANT_SPEAKER);
@@ -326,12 +372,13 @@ export default function ChatIA() {
         voice,
         analysis,
         leadId,
+        confirmedAppointment,
         activeSpeaker,
         savedAt: Date.now(),
       };
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch {}
-  }, [messages, sessionId, name, phone, voice, analysis, leadId, activeSpeaker]);
+  }, [messages, sessionId, name, phone, voice, analysis, leadId, confirmedAppointment, activeSpeaker]);
 
   const sanitizeFolder = (s) =>
     String(s || "anonimo").toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "anonimo";
@@ -708,6 +755,7 @@ export default function ChatIA() {
       const result = await createAppointment(scheduler);
       toast.success("Agendamento confirmado");
       upsertLead({ stage: "em_negociacao", urgency: "alta" });
+      setConfirmedAppointment(result);
       setScheduler(null);
       await typeAssistantMessage(buildAppointmentMessage(result));
     } catch (err) {
@@ -810,6 +858,18 @@ export default function ChatIA() {
     });
     setInput("");
     setThinking(true);
+    const existingAppointment = confirmedAppointment || inferConfirmedAppointment(messagesRef.current);
+    const userIsChangingSchedule = isScheduleChangeRequest(msg);
+    const lastAssistantMessage = [...messagesRef.current].reverse().find((m) => m.role !== "user" && !m.typing);
+    const isConfirmingScheduleOffer = isSimpleConfirmation(msg) && hasScheduleOffer(lastAssistantMessage?.content);
+    if (existingAppointment && !userIsChangingSchedule && (SCHEDULE_REGEX.test(msg) || isConfirmingScheduleOffer)) {
+      setConfirmedAppointment(existingAppointment);
+      setScheduler(null);
+      setThinking(false);
+      await typeAssistantMessage(buildAlreadyConfirmedMessage(existingAppointment));
+      sendingRef.current = false;
+      return;
+    }
     const scheduleIntent = extractScheduleIntent(msg);
     if (scheduleIntent) {
       try {
@@ -819,6 +879,7 @@ export default function ChatIA() {
         });
         toast.success("Agendamento criado no painel da Agenda");
         upsertLead({ stage: "em_negociacao", urgency: "alta" });
+        setConfirmedAppointment(result);
         setScheduler(null);
         setThinking(false);
         await typeAssistantMessage(buildAppointmentMessage(result));
@@ -866,6 +927,7 @@ export default function ChatIA() {
           });
           toast.success("Consulta salva automaticamente na Agenda");
           upsertLead({ stage: "em_negociacao", urgency: "alta", description: agBlock.resumo_caso });
+          setConfirmedAppointment(result);
           // Substitui a resposta da IA pela confirmação rica com link Meet
           data = { ...data, response: buildAppointmentMessage(result) };
         } catch (err) {
@@ -891,7 +953,12 @@ export default function ChatIA() {
         } catch {}
         toast.success("Dra. Kênia foi notificada e está entrando na conversa", { duration: 4000 });
       }
-      const responseText = cleanRepeatedText(data.response);
+      const guardAppointment = confirmedAppointment || inferConfirmedAppointment(messagesRef.current);
+      const responseText = cleanRepeatedText(
+        guardAppointment && !userIsChangingSchedule
+          ? stripScheduleOffersAfterConfirmation(data.response, guardAppointment)
+          : data.response
+      );
       const speaker = data.handoff || activeSpeaker === "Dra. Kênia Garcia" ? "Dra. Kênia Garcia" : data.speaker || null;
       await typeAssistantMessage(responseText, data.audio_base64 || null, speaker);
       const wantsKenia = data.handoff || speaker === "Dra. Kênia Garcia";
@@ -939,6 +1006,7 @@ export default function ChatIA() {
     setSessionId(null);
     setAnalysis(null);
     setLeadId(null);
+    setConfirmedAppointment(null);
     setActiveSpeaker(ASSISTANT_SPEAKER);
     try { window.localStorage.removeItem(STORAGE_KEY); } catch {}
     stopAudio();
