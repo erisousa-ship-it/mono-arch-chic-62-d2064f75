@@ -409,35 +409,49 @@ app.get("/api/whatsapp/diagnostics", auth, (_req, res) => {
   ] });
 });
 
+const whatsappStatusPayload = () => ({
+  connected: state.connected,
+  state: connectionState(),
+  hasQr: !!state.qrDataUrl,
+  qr: state.qrDataUrl,
+  raw: state.qr,
+  startingAt: state.startingAt,
+  secondsWaiting: state.startingAt ? Math.floor((Date.now() - state.startingAt) / 1000) : 0,
+  last_error: state.lastError,
+  bot_enabled: !!state.config.bot_enabled,
+  ollama_base_url_configured: !!OLLAMA_BASE_URL,
+  ai_router_url: AI_ROUTER_URL,
+  ollama_model: OLLAMA_MODEL,
+  last_ai_error: state.lastAiError,
+  last_auto_reply_at: state.lastAutoReplyAt,
+  auto_reply_count: state.autoReplyCount,
+  qr_created_at: state.qrCreatedAt,
+  qr_expires_at: state.qrExpiresAt,
+  qr_expires_in_s: qrExpiresInSeconds(),
+  last_connected_at: state.lastConnectedAt,
+  last_disconnected_at: state.lastDisconnectedAt,
+  reconnect_attempts: state.reconnectAttempts,
+  uptime_s: Math.floor((Date.now() - processStartedAt) / 1000),
+  last_restart_reason: state.lastRestartReason,
+});
+
 app.post("/api/whatsapp/test-connection", auth, (_req, res) => {
   res.json({ connected: state.connected, provider: "baileys", state: connectionState(), error: state.lastError });
 });
 
 app.get("/api/whatsapp/baileys/status", auth, (_req, res) => {
-  const secondsWaiting = state.startingAt ? Math.floor((Date.now() - state.startingAt) / 1000) : 0;
-  res.json({
-    connected: state.connected,
-    state: connectionState(),
-    hasQr: !!state.qrDataUrl,
-    startingAt: state.startingAt,
-    secondsWaiting,
-    last_error: state.lastError,
-    bot_enabled: !!state.config.bot_enabled,
-    ollama_base_url_configured: !!OLLAMA_BASE_URL,
-    ai_router_url: AI_ROUTER_URL,
-    ollama_model: OLLAMA_MODEL,
-    last_ai_error: state.lastAiError,
-    last_auto_reply_at: state.lastAutoReplyAt,
-    auto_reply_count: state.autoReplyCount,
-  });
+  renewQrIfStale();
+  res.json(whatsappStatusPayload());
 });
 
 app.get("/api/whatsapp/qr", auth, (_req, res) => {
-  res.json({ qr: state.qrDataUrl, raw: state.qr, state: connectionState(), last_error: state.lastError });
+  renewQrIfStale();
+  res.json({ ...whatsappStatusPayload(), qr: state.qrDataUrl, raw: state.qr });
 });
 
 app.get("/api/whatsapp/baileys/qr", auth, (_req, res) => {
-  res.json({ qr: state.qrDataUrl, raw: state.qr, state: connectionState(), last_error: state.lastError });
+  renewQrIfStale();
+  res.json({ ...whatsappStatusPayload(), qr: state.qrDataUrl, raw: state.qr });
 });
 
 app.post("/api/whatsapp/baileys/restart", auth, async (_req, res) => {
