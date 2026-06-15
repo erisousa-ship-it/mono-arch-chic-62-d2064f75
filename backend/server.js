@@ -18,6 +18,10 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPA
 const AI_ROUTER_URL = (process.env.AI_ROUTER_URL || `${SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/ai-router`).replace(/\/+$/, "");
 const OLLAMA_BASE_URL = (process.env.OLLAMA_BASE_URL || process.env.OLLAMA_URL || "").replace(/\/+$/, "");
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen2.5:3b-instruct";
+const EMERGENT_BASE_URL = (process.env.EMERGENT_BASE_URL || "https://api.emergent.sh/v1").replace(/\/+$/, "");
+const EMERGENT_API_KEY = process.env.EMERGENT_API_KEY || "";
+const EMERGENT_TEXT_MODEL = process.env.EMERGENT_TEXT_MODEL || "gpt-4o-mini";
+const EMERGENT_IMAGE_MODEL = process.env.EMERGENT_IMAGE_MODEL || "gpt-image-1";
 
 const DEFAULT_BOT_PROMPT = `Você é a secretária jurídica da Dra. Kênia Garcia atendendo pelo WhatsApp.
 Responda sempre em português do Brasil, com tom humano, acolhedor, profissional e objetivo.
@@ -41,7 +45,8 @@ Faça uma pergunta por vez, mantenha continuidade pelo histórico e encaminhe pa
 - Fontes jurídicas confiáveis para apoiar respostas: planalto.gov.br, jusbrasil.com.br, STF, STJ, CNJ. Nunca invente leis, súmulas ou números de processo.
 
 # AGENDAMENTO DE CONSULTA (REGRA CRÍTICA)
-Quando o cliente quiser marcar consulta/reunião, colete em ordem (uma pergunta por vez): nome completo, telefone, e-mail (se tiver), cidade, área jurídica do caso, breve resumo, data desejada (dd/mm/aaaa) e horário (HH:MM).
+Use sempre a DATA/HORA ATUAL informada no contexto do sistema (fuso America/Sao_Paulo). Nunca use datas de exemplo como data real. Se o cliente disser "hoje", "amanhã", "segunda" ou outro termo relativo, converta a partir da data atual do contexto; se houver ambiguidade, confirme antes.
+Quando o cliente quiser marcar consulta/reunião, colete em ordem (uma pergunta por vez): nome completo, telefone, e-mail (se tiver), cidade, área jurídica do caso, breve resumo, data desejada (dd/mm/aaaa) e horário (HH:MM). Não ofereça automaticamente a data de hoje; ofereça apenas horários futuros em dias úteis, salvo se o cliente pedir expressamente atendimento hoje.
 Ao ter os dados essenciais (nome, data, hora), CONFIRME em texto natural (ex.: "Confirmado: 17/06/2026 às 14:00") e na MESMA mensagem inclua, ao final, EXATAMENTE este bloco — sem markdown, sem crases, sem alterar as tags:
 <AGENDAMENTO>
 {"nome":"...","telefone":"...","email":"...","cidade":"...","area_juridica":"...","resumo_caso":"...","data_agendamento":"YYYY-MM-DD","horario_agendamento":"HH:MM"}
@@ -66,6 +71,7 @@ const state = {
   autoReplyCount: 0,
   qrAttempts: 0,
   config: { provider: "baileys", bot_enabled: true, bot_prompt: DEFAULT_BOT_PROMPT },
+  settings: { llm_text_key: "", llm_image_key: "" },
 };
 
 let startSeq = 0;
