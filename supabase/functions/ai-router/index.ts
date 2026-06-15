@@ -100,12 +100,14 @@ async function tryEmergentImage(prompt: string) {
   const r = await fetch(`${EMERGENT_URL.replace(/\/$/, '')}/images/generations`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${EMERGENT_KEY}` },
-    body: JSON.stringify({ prompt, size: '1024x1024' }),
+    body: JSON.stringify({ model: 'gpt-image-1', prompt, size: '1024x1024', n: 1 }),
   });
   if (!r.ok) throw new Error(`emergent_image_${r.status}: ${await r.text()}`);
   const j = await r.json();
   const item = j.data?.[0] ?? {};
-  const image = item.b64_json ? `data:image/png;base64,${item.b64_json}` : item.url;
+  const rawB64 = item.b64_json ?? j.image_base64 ?? j.b64_json;
+  const image = rawB64 ? `data:image/png;base64,${String(rawB64).replace(/^data:image\/[^;]+;base64,/, '')}` : (item.url ?? j.image_url ?? null);
+  if (!image) throw new Error('emergent_image_empty_response');
   return { provider: 'emergent', image };
 }
 
