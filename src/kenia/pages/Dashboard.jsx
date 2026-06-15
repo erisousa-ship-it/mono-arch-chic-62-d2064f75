@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { api } from "@/kenia/lib/api";
+import { api, enforceSecretarySecondPerson } from "@/kenia/lib/api";
 import { Card } from "@/kenia/components/ui/card";
 import { Input } from "@/kenia/components/ui/input";
 import { Button } from "@/kenia/components/ui/button";
@@ -181,7 +181,7 @@ export default function Dashboard() {
       setAiSession(data.session_id);
       setAiMessages((m) => [...m, {
         role: "assistant",
-        content: data.response,
+        content: enforceSecretarySecondPerson(data.response),
         audio_base64: data.audio_base64,
         analysis: data.analysis,
       }]);
