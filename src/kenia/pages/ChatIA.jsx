@@ -339,6 +339,7 @@ export default function ChatIA() {
   const [playingIdx, setPlayingIdx] = useState(null);
   const [scheduler, setScheduler] = useState(null);
   const [scheduling, setScheduling] = useState(false);
+  const [confirmedAppointment, setConfirmedAppointment] = useState(persisted?.confirmedAppointment || null);
   const [leadId, setLeadId] = useState(persisted?.leadId || null);
   const [showAnalysisPanel, setShowAnalysisPanel] = useState(true);
   const [activeSpeaker, setActiveSpeaker] = useState(persisted?.activeSpeaker || ASSISTANT_SPEAKER);
@@ -371,12 +372,13 @@ export default function ChatIA() {
         voice,
         analysis,
         leadId,
+        confirmedAppointment,
         activeSpeaker,
         savedAt: Date.now(),
       };
       window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     } catch {}
-  }, [messages, sessionId, name, phone, voice, analysis, leadId, activeSpeaker]);
+  }, [messages, sessionId, name, phone, voice, analysis, leadId, confirmedAppointment, activeSpeaker]);
 
   const sanitizeFolder = (s) =>
     String(s || "anonimo").toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60) || "anonimo";
@@ -753,6 +755,7 @@ export default function ChatIA() {
       const result = await createAppointment(scheduler);
       toast.success("Agendamento confirmado");
       upsertLead({ stage: "em_negociacao", urgency: "alta" });
+      setConfirmedAppointment(result);
       setScheduler(null);
       await typeAssistantMessage(buildAppointmentMessage(result));
     } catch (err) {
