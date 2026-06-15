@@ -179,8 +179,8 @@ Deno.serve(async (req) => {
 
     if (mode === 'image') {
       const result = await runChain([
-        () => tryEmergentImage(prompt),
         () => tryLovableImage(prompt),
+        () => tryEmergentImage(prompt),
       ]);
       return Response.json(result, { headers: corsHeaders });
     }
