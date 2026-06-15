@@ -363,7 +363,8 @@ app.put("/api/whatsapp/config", auth, (req, res) => {
 app.get("/api/whatsapp/diagnostics", auth, (_req, res) => {
   res.json({ ok: true, static_mode: false, checks: [
     { id: "baileys-backend", ok: true, label: "Backend Baileys ativo", msg: "Serviço WhatsApp publicado e respondendo.", hint: state.connected ? "WhatsApp conectado." : state.qrDataUrl ? "QR Code disponível para leitura." : "Se ficar inicializando por mais de 30s, gere uma nova sessão." },
-    { id: "ollama", ok: !state.lastAiError && (!!OLLAMA_BASE_URL || !!AI_ROUTER_URL), label: "Resposta automática IA", msg: state.lastAiError ? `Última falha: ${state.lastAiError}` : (OLLAMA_BASE_URL ? "Backend ligado direto ao Ollama." : "Backend ligado ao ai-router/Ollama."), hint: state.lastAutoReplyAt ? `Última resposta enviada: ${new Date(state.lastAutoReplyAt).toLocaleString("pt-BR")}` : "Envie uma mensagem para este WhatsApp para testar a resposta automática." },
+    { id: "messages", ok: !!state.lastIncomingAt || state.autoReplyCount > 0, label: "Mensagens recebidas", msg: state.lastIncomingAt ? `Última mensagem recebida: ${new Date(state.lastIncomingAt).toLocaleString("pt-BR")}` : "Nenhuma mensagem nova chegou ao backend desde que ele iniciou.", hint: state.lastIgnoredReason ? `Última ignorada: ${state.lastIgnoredReason}` : "Envie mensagem de outro celular; mensagens enviadas pelo próprio WhatsApp conectado são ignoradas." },
+    { id: "ollama", ok: !state.lastAiError && (!!OLLAMA_BASE_URL || !!AI_ROUTER_URL), label: "Resposta automática IA", msg: state.lastAiError ? `Última falha: ${state.lastAiError}` : (OLLAMA_BASE_URL ? "Backend ligado direto ao Ollama." : "Backend ligado ao ai-router/Ollama."), hint: state.lastAutoReplyAt ? `Última resposta enviada: ${new Date(state.lastAutoReplyAt).toLocaleString("pt-BR")}` : "Ollama está ok; falta chegar uma mensagem válida para disparar a resposta." },
   ] });
 });
 
@@ -385,6 +386,16 @@ app.get("/api/whatsapp/baileys/status", auth, (_req, res) => {
     ai_router_url: AI_ROUTER_URL,
     ollama_model: OLLAMA_MODEL,
     last_ai_error: state.lastAiError,
+    last_incoming_at: state.lastIncomingAt,
+    last_incoming_from: state.lastIncomingFrom,
+    last_incoming_text_preview: state.lastIncomingTextPreview,
+    incoming_count: state.incomingCount,
+    last_ignored_at: state.lastIgnoredAt,
+    last_ignored_reason: state.lastIgnoredReason,
+    ignored_count: state.ignoredCount,
+    last_reply_target: state.lastReplyTarget,
+    last_reply_text_preview: state.lastReplyTextPreview,
+    last_send_error: state.lastSendError,
     last_auto_reply_at: state.lastAutoReplyAt,
     auto_reply_count: state.autoReplyCount,
   });
