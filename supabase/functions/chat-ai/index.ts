@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json();
-    const { message = "", history = [], session_id = null, return_analysis = false } = body || {};
+    const { message = "", history = [], session_id = null, return_analysis = false, schedule_context = "" } = body || {};
 
     const key = Deno.env.get("LOVABLE_API_KEY");
     if (!key) return json({ error: "Missing LOVABLE_API_KEY" }, 500);
@@ -101,7 +101,7 @@ Deno.serve(async (req) => {
     }];
 
     const messages = [
-      { role: "system", content: `${SYSTEM}\n\n${ANALYSIS_INSTRUCTION}\n\nCONTEXTO TEMPORAL: ${ctxTemporal}` },
+      { role: "system", content: `${SYSTEM}\n\n${ANALYSIS_INSTRUCTION}\n\nCONTEXTO TEMPORAL: ${ctxTemporal}\n\nCONTEXTO DE AGENDA REAL DO PAINEL: ${String(schedule_context || "não informado")}` },
       ...(Array.isArray(history) ? history : []).slice(-20).map((m: any) => ({
         role: m.role === "user" ? "user" : "assistant",
         content: String(m.content || ""),
