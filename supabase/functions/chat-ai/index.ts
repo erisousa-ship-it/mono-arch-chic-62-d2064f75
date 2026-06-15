@@ -4,6 +4,7 @@ const MODEL = "google/gemini-3-flash-preview";
 
 const SYSTEM = `Você é a secretária virtual da Dra. Kênia Garcia E também atua como advogada que analisa o caso e faz o agendamento — nessa ordem: (1) secretária acolhe, (2) advogada analisa, (3) agenda. ` +
   `RESPOSTAS CURTAS estilo WhatsApp humano: 1-2 frases, no MÁXIMO 3. Uma pergunta por vez. Sem listas longas, sem explicações jurídicas extensas no chat. ` +
+  `NUNCA fale como se fosse o cliente em primeira pessoa. É proibido iniciar ou responder com "estou precisando", "preciso", "quero" ou frases semelhantes quando estiver reformulando a fala do cliente. Sempre converta para segunda pessoa: "Você está precisando de ajuda, certo?" ou "Você está precisando de alguma informação jurídica, certo?". ` +
   `PROIBIDO perguntar "qual área jurídica?" — a área é sempre inferida dos fatos. Comece por "o que aconteceu?" e colete datas, envolvidos, provas e objetivo aos poucos, uma coisa por mensagem. ` +
   `Horário oficial de Brasília. Não invente leis nem números de processo. ` +
   `Nunca recuse ajuda. Responda qualquer assunto (pessoal, emocional, polêmico) de forma humanizada e sem julgamento — acolhe, valida, conselho curto. Em risco à vida: CVV 188, SAMU 192, Polícia 190, Disque 180/100. Em violência: Lei 11.340/06 e encaminhe à Dra. Kênia.\n\n` +
@@ -61,6 +62,29 @@ function greetingNow(): "Bom dia" | "Boa tarde" | "Boa noite" {
   if (h >= 5 && h < 12) return "Bom dia";
   if (h >= 12 && h < 18) return "Boa tarde";
   return "Boa noite";
+}
+
+function normalizePortuguese(value = "") {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/["“”'`´]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function enforceSecondPerson(reply = "") {
+  const text = String(reply || "").trim();
+  if (!text) return text;
+  const normalized = normalizePortuguese(text);
+  const startsWithLegalInfo = /^(?:eu\s+)?(?:(?:estou|to|tou)\s+precisando|preciso)\s+de\s+(?:alguma\s+)?informacao\s+juridica\b/.test(normalized);
+  const startsWithHelp = /^(?:eu\s+)?(?:(?:estou|to|tou)\s+precisando|preciso)\s+de\s+ajuda\b/.test(normalized);
+  if (startsWithLegalInfo) return "Você está precisando de alguma informação jurídica, certo?";
+  if (startsWithHelp) return "Você está precisando de ajuda, certo?";
+  return text
+    .replace(/\b(?:eu\s+)?(?:(?:estou|t[oô]u)\s+precisando|preciso)\s+de\s+(?:alguma\s+)?informa[cç][aã]o\s+jur[ií]dica\b/giu, "Você está precisando de alguma informação jurídica, certo?")
+    .replace(/\b(?:eu\s+)?(?:(?:estou|t[oô]u)\s+precisando|preciso)\s+de\s+ajuda\b/giu, "Você está precisando de ajuda, certo?");
 }
 
 Deno.serve(async (req) => {
@@ -156,7 +180,7 @@ Deno.serve(async (req) => {
     let payload: any = null;
     try { payload = JSON.parse(call?.function?.arguments || "{}"); } catch { payload = {}; }
 
-    const reply = payload?.response || data?.choices?.[0]?.message?.content || "Pode me contar um pouco mais sobre o que aconteceu?";
+    const reply = enforceSecondPerson(payload?.response || data?.choices?.[0]?.message?.content || "Pode me contar um pouco mais sobre o que aconteceu?");
     const analysis = return_analysis ? (payload?.analysis || null) : null;
 
     return json({
