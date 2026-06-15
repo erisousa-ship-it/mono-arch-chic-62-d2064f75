@@ -300,7 +300,7 @@ async function generateDirectOllamaReply(messages) {
 async function generateAiReply(jid, text) {
   const history = rememberMessage(jid, "user", text);
   const messages = [
-    { role: "system", content: state.config.bot_prompt || DEFAULT_BOT_PROMPT },
+    { role: "system", content: `${state.config.bot_prompt || DEFAULT_BOT_PROMPT}\n\n${buildTemporalSystemContext()}` },
     ...history,
   ];
 
