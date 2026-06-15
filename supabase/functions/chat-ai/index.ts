@@ -38,9 +38,13 @@ function todayHumanBR() {
 }
 
 function greetingNow(): "Bom dia" | "Boa tarde" | "Boa noite" {
-  const h = parseInt(new Intl.DateTimeFormat("pt-BR", {
+  const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/Sao_Paulo", hour: "2-digit", hour12: false,
-  }).format(new Date()), 10);
+  }).formatToParts(new Date());
+  const hourStr = parts.find((p) => p.type === "hour")?.value ?? "0";
+  let h = parseInt(hourStr, 10);
+  if (!Number.isFinite(h)) h = 0;
+  if (h === 24) h = 0; // edge case: some locales return "24" at midnight
   if (h >= 5 && h < 12) return "Bom dia";
   if (h >= 12 && h < 18) return "Boa tarde";
   return "Boa noite";
@@ -56,7 +60,13 @@ Deno.serve(async (req) => {
     const key = Deno.env.get("LOVABLE_API_KEY");
     if (!key) return json({ error: "Missing LOVABLE_API_KEY" }, 500);
 
-    const ctxTemporal = `Agora em Brasília: ${todayHumanBR()}. Saudação adequada: "${greetingNow()}".`;
+    const saud = greetingNow();
+    const ctxTemporal =
+      `Agora em Brasília (America/Sao_Paulo): ${todayHumanBR()}. ` +
+      `Saudação OBRIGATÓRIA conforme o horário de Brasília: use EXATAMENTE "${saud}" ` +
+      `ao cumprimentar. NUNCA use outra saudação (não diga "Bom dia" à tarde/noite, ` +
+      `nem "Boa tarde" de manhã/à noite, nem "Boa noite" de manhã/à tarde). ` +
+      `Se já cumprimentou nesta conversa, não repita a saudação.`;
 
     const tools = [{
       type: "function",
