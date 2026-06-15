@@ -113,20 +113,23 @@ async function tryEmergentImage(prompt: string) {
 
 async function tryLovableImage(prompt: string) {
   if (!LOVABLE_KEY) throw new Error('lovable_not_configured');
-  const r = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+  const r = await fetch('https://ai.gateway.lovable.dev/v1/images/generations', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${LOVABLE_KEY}` },
     body: JSON.stringify({
-      model: 'google/gemini-2.5-flash-image',
-      messages: [{ role: 'user', content: prompt }],
-      modalities: ['image', 'text'],
+      model: 'openai/gpt-image-2',
+      prompt,
+      quality: 'low',
+      size: '1024x1024',
+      n: 1,
+      stream: false,
     }),
   });
   if (!r.ok) throw new Error(`lovable_image_${r.status}: ${await r.text()}`);
   const j = await r.json();
-  const image = j.choices?.[0]?.message?.images?.[0]?.image_url?.url
-    ?? j.choices?.[0]?.message?.images?.[0]?.url
-    ?? null;
+  const rawB64 = j.data?.[0]?.b64_json ?? j.image_base64 ?? j.b64_json;
+  const image = rawB64 ? `data:image/png;base64,${String(rawB64).replace(/^data:image\/[^;]+;base64,/, '')}` : (j.data?.[0]?.url ?? j.image_url ?? null);
+  if (!image) throw new Error('lovable_image_empty_response');
   return { provider: 'lovable', image };
 }
 
