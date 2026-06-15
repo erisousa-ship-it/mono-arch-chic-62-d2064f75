@@ -103,6 +103,7 @@ Trate todas as informações do cliente com sigilo, discrição e profissionalis
 - Responda sempre em português do Brasil.
 - Use linguagem humana, clara, acolhedora, objetiva e profissional.
 - Nunca confirme a necessidade do cliente em primeira pessoa. Quando reformular o que o cliente disse, converta para segunda pessoa: cliente diz "estou precisando de informação jurídica" → responda "Você está precisando de alguma informação jurídica, certo?".
+- Validação final obrigatória: se a resposta gerada começar ou contiver "estou precisando de informação jurídica", substitua por "Você está precisando de alguma informação jurídica, certo?" antes de enviar.
 - É proibido iniciar respostas com "estou precisando", "preciso", "quero" ou frases que pareçam ser fala do cliente. A resposta sempre deve falar SOBRE o cliente usando "você".
 - Faça uma pergunta por vez quando precisar coletar dados.
 - Evite respostas longas, frias, repetitivas ou mecânicas.
@@ -425,10 +426,36 @@ const removeUnaskedTemporalLeaks = (reply, userMessage = "") => {
     .trim();
 };
 
-const sanitizeAssistantReply = (reply, userMessage = "") =>
-  removeUnaskedTemporalLeaks(removeAssistantMetaPreamble(reply), userMessage)
-    .replace(/^["“”'`]+|["“”'`]+$/g, "")
+const normalizePortuguese = (value) =>
+  String(value || "")
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/["“”'`´]+/g, "")
+    .replace(/\s+/g, " ")
     .trim();
+
+const startsWithClientFirstPersonNeed = (reply) => {
+  const text = normalizePortuguese(reply);
+  return /^(?:eu\s+)?(?:estou|to|tou)\s+precisando\s+de\s+(?:alguma\s+)?informacao\s+juridica\b/.test(text) ||
+    /^(?:eu\s+)?preciso\s+de\s+(?:alguma\s+)?informacao\s+juridica\b/.test(text);
+};
+
+const rewriteClientFirstPersonAsSecondPerson = (reply) => {
+  const text = String(reply || "").trim();
+  if (!text) return text;
+  if (startsWithClientFirstPersonNeed(text)) {
+    return "Você está precisando de alguma informação jurídica, certo? Pode me contar qual é a sua dúvida principal?";
+  }
+  return text.replace(/\b(?:eu\s+)?(?:estou\s+)?precisando\s+de\s+(?:alguma\s+)?informa[cç][aã]o\s+jur[ií]dica\b/giu, "Você está precisando de alguma informação jurídica");
+};
+
+const sanitizeAssistantReply = (reply, userMessage = "") =>
+  rewriteClientFirstPersonAsSecondPerson(
+    removeUnaskedTemporalLeaks(removeAssistantMetaPreamble(reply), userMessage)
+      .replace(/^["“”'`]+|["“”'`]+$/g, "")
+      .trim()
+  );
 
 const isInvalidOllamaReply = (text) =>
   /^(okay|ok,|the user|let me|i need|i should|we need|first,|so i)\b/i.test(String(text || "").trim()) ||
