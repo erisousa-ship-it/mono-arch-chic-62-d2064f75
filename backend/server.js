@@ -505,6 +505,51 @@ app.get("/api/ai/ping", async (_req, res) => {
   res.json(result);
 });
 
+app.get("/api/settings", auth, (_req, res) => {
+  res.json({
+    using_default_text: !state.settings.llm_text_key,
+    using_default_image: !state.settings.llm_image_key,
+    llm_text_key_masked: maskKey(state.settings.llm_text_key || EMERGENT_API_KEY),
+    llm_image_key_masked: maskKey(state.settings.llm_image_key || EMERGENT_API_KEY),
+    emergent_configured: !!(state.settings.llm_text_key || state.settings.llm_image_key || EMERGENT_API_KEY),
+    emergent_base_url: EMERGENT_BASE_URL,
+  });
+});
+
+app.put("/api/settings", auth, (req, res) => {
+  const body = req.body || {};
+  if ("llm_text_key" in body) state.settings.llm_text_key = String(body.llm_text_key || "").trim();
+  if ("llm_image_key" in body) state.settings.llm_image_key = String(body.llm_image_key || "").trim();
+  res.json({ ok: true });
+});
+
+app.post("/api/settings/test-text", auth, async (_req, res) => {
+  try {
+    const text = await callEmergentChat({ messages: [{ role: "user", content: "Responda apenas: ok" }] });
+    res.json({ ok: true, provider: "emergent", model: EMERGENT_TEXT_MODEL, using_custom_key: !!state.settings.llm_text_key, sample: text.slice(0, 80) });
+  } catch (e) {
+    res.status(500).json({ ok: false, provider: "emergent", model: EMERGENT_TEXT_MODEL, error: e.message });
+  }
+});
+
+app.post("/api/settings/test-image", auth, async (_req, res) => {
+  try {
+    const img = await callEmergentImage({ prompt: "ícone jurídico abstrato elegante", style: "teste técnico simples" });
+    res.json({ ok: true, provider: "emergent", model: EMERGENT_IMAGE_MODEL, using_custom_key: !!state.settings.llm_image_key, has_image: !!(img.image_base64 || img.image_url) });
+  } catch (e) {
+    res.status(500).json({ ok: false, provider: "emergent", model: EMERGENT_IMAGE_MODEL, error: e.message });
+  }
+});
+
+app.post("/api/generate-image", auth, async (req, res) => {
+  try {
+    const result = await callEmergentImage(req.body || {});
+    res.json({ ok: true, provider: "emergent", model: EMERGENT_IMAGE_MODEL, ...result });
+  } catch (e) {
+    res.status(500).json({ ok: false, provider: "emergent", model: EMERGENT_IMAGE_MODEL, error: e.message });
+  }
+});
+
 app.get("/api/whatsapp/config", auth, (_req, res) => {
   res.json(state.config);
 });
