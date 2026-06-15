@@ -261,14 +261,16 @@ async function handleIncomingMessage(msg) {
   }
 }
 
-async function startSock({ clearAuth = false } = {}) {
+async function startSock({ clearAuth = false, reason = "manual" } = {}) {
+  if (state.starting && Date.now() - state.startingAt < START_DEBOUNCE_MS) return;
   const seq = ++startSeq;
+  state.starting = true;
+  state.lastRestartReason = reason;
   if (clearAuth) await resetAuthSession();
   else stopSock("new-start");
   if (qrWatchdogTimer) clearTimeout(qrWatchdogTimer);
   state.startingAt = Date.now();
-  state.qr = null;
-  state.qrDataUrl = null;
+  markQrUnavailable();
   state.connected = false;
   state.lastError = null;
 
@@ -283,16 +285,15 @@ async function startSock({ clearAuth = false } = {}) {
   });
 
   qrWatchdogTimer = setTimeout(() => {
-    if (seq === startSeq && !state.connected && !state.qrDataUrl) {
-      state.qrAttempts += 1;
-      if (state.qrAttempts >= 2) {
-        state.lastError = "O Baileys não gerou QR automaticamente. Clique em Nova sessão / QR limpo para recriar a sessão.";
-        stopSock("qr-timeout");
-        return;
-      }
-      startSock({ clearAuth: true }).catch((e) => { state.lastError = e.message; });
+    if (seq !== startSeq || state.connected) return;
+    if (state.qrDataUrl) {
+      renewQrIfStale();
+      return;
     }
-  }, 25000);
+    state.qrAttempts += 1;
+    state.lastError = "QR ainda não foi gerado; recriando sessão de pareamento automaticamente.";
+    scheduleStart({ delay: 1000, clearAuth: state.qrAttempts >= 2, reason: "qr-watchdog" });
+  }, QR_WATCHDOG_MS);
 
   sock.ev.on("creds.update", saveCreds);
   sock.ev.on("connection.update", async (update) => {
@@ -302,6 +303,9 @@ async function startSock({ clearAuth = false } = {}) {
       state.qr = qr;
       state.lastError = null;
       state.qrAttempts = 0;
+      state.starting = false;
+      state.qrCreatedAt = Date.now();
+      state.qrExpiresAt = state.qrCreatedAt + QR_TTL_MS;
       try {
         state.qrDataUrl = await QRCode.toDataURL(qr, { width: 320, margin: 2 });
       } catch (e) {
@@ -310,19 +314,26 @@ async function startSock({ clearAuth = false } = {}) {
     }
     if (connection === "open") {
       state.connected = true;
+      state.starting = false;
+      state.reconnectAttempts = 0;
+      state.lastConnectedAt = Date.now();
       state.lastError = null;
-      state.qr = null;
-      state.qrDataUrl = null;
+      markQrUnavailable();
       if (qrWatchdogTimer) clearTimeout(qrWatchdogTimer);
     }
     if (connection === "close") {
       state.connected = false;
+      state.starting = false;
+      state.lastDisconnectedAt = Date.now();
+      markQrUnavailable();
       const code = lastDisconnect?.error?.output?.statusCode;
       state.lastError = lastDisconnect?.error?.message || `Conexão fechada (${code || "sem código"})`;
+      state.reconnectAttempts = Math.min(state.reconnectAttempts + 1, 8);
+      const delay = Math.min(30000, 2000 + state.reconnectAttempts * 2500);
       if (code !== DisconnectReason.loggedOut) {
-        scheduleStart({ delay: 2000, clearAuth: code === DisconnectReason.badSession || code === DisconnectReason.connectionReplaced });
+        scheduleStart({ delay, clearAuth: code === DisconnectReason.badSession || code === DisconnectReason.connectionReplaced, reason: `close-${code || "unknown"}` });
       } else {
-        scheduleStart({ delay: 1000, clearAuth: true });
+        scheduleStart({ delay: 2000, clearAuth: true, reason: "logged-out" });
       }
     }
   });
