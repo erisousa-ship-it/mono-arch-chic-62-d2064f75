@@ -347,11 +347,11 @@ const callLovableImage = async ({ prompt, style = "" }) => {
     `Tema: ${prompt}`,
   ].filter(Boolean).join("\n");
   if (!LOVABLE_API_KEY) {
-    throw new Error("lovable_image_not_configured: LOVABLE_API_KEY indisponível neste backend; usando fallback disponível");
+    throw new Error("lovable_image_not_configured: defina LOVABLE_API_KEY no backend Render para gerar imagens pela Lovable AI");
   }
   const r = await fetch("https://ai.gateway.lovable.dev/v1/images/generations", {
     method: "POST",
-    headers: { "Content-Type": "application/json", "Lovable-API-Key": LOVABLE_API_KEY, "X-Lovable-AIG-SDK": "vercel-ai-sdk" },
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${LOVABLE_API_KEY}` },
     body: JSON.stringify({ model: "openai/gpt-image-2", prompt: finalPrompt, quality: "low", size: "1024x1024", n: 1, stream: false }),
   });
   const raw = await r.text();

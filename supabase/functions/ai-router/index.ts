@@ -87,7 +87,7 @@ async function tryLovableChat(messages: any[]) {
   if (!LOVABLE_KEY) throw new Error('lovable_not_configured');
   const r = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Lovable-API-Key': LOVABLE_KEY, 'X-Lovable-AIG-SDK': 'vercel-ai-sdk' },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${LOVABLE_KEY}` },
     body: JSON.stringify({ model: 'google/gemini-3-flash-preview', messages }),
   });
   if (!r.ok) throw new Error(`lovable_chat_${r.status}: ${await r.text()}`);
@@ -115,7 +115,7 @@ async function tryLovableImage(prompt: string) {
   if (!LOVABLE_KEY) throw new Error('lovable_not_configured');
   const r = await fetch('https://ai.gateway.lovable.dev/v1/images/generations', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Lovable-API-Key': LOVABLE_KEY, 'X-Lovable-AIG-SDK': 'vercel-ai-sdk' },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${LOVABLE_KEY}` },
     body: JSON.stringify({
       model: 'openai/gpt-image-2',
       prompt,
