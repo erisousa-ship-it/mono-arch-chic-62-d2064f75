@@ -38,6 +38,16 @@ const state = {
   startingAt: 0,
   lastError: null,
   lastAiError: null,
+  lastIncomingAt: null,
+  lastIncomingFrom: null,
+  lastIncomingTextPreview: null,
+  incomingCount: 0,
+  lastIgnoredAt: null,
+  lastIgnoredReason: null,
+  ignoredCount: 0,
+  lastReplyTarget: null,
+  lastReplyTextPreview: null,
+  lastSendError: null,
   lastAutoReplyAt: null,
   autoReplyCount: 0,
   qrAttempts: 0,
@@ -55,6 +65,12 @@ const connectionState = () => {
   if (state.qrDataUrl) return "qr";
   if (state.lastError) return "offline";
   return "connecting";
+};
+
+const markIgnoredMessage = (reason) => {
+  state.lastIgnoredAt = Date.now();
+  state.lastIgnoredReason = reason;
+  state.ignoredCount += 1;
 };
 
 const stopSock = (reason = "restart") => {
@@ -175,22 +191,36 @@ async function generateAiReply(jid, text) {
 async function handleIncomingMessage(msg) {
   const jid = msg.key?.remoteJid;
   const id = msg.key?.id;
-  if (!state.config.bot_enabled || msg.key?.fromMe || !jid || !id || !msg.message || !isReplyableJid(jid)) return;
-  if (processedMessages.has(id)) return;
+  if (!state.config.bot_enabled) return markIgnoredMessage("bot_disabled");
+  if (msg.key?.fromMe) return markIgnoredMessage("from_me_ignored");
+  if (!jid) return markIgnoredMessage("missing_jid");
+  if (!id) return markIgnoredMessage("missing_message_id");
+  if (!msg.message) return markIgnoredMessage("missing_message_body");
+  if (!isReplyableJid(jid)) return markIgnoredMessage(`unsupported_jid:${jid}`);
+  if (processedMessages.has(id)) return markIgnoredMessage("duplicate_message");
   processedMessages.add(id);
   if (processedMessages.size > 500) processedMessages.clear();
 
   const text = extractTextMessage(msg.message);
-  if (!text) return;
+  if (!text) return markIgnoredMessage("empty_or_unsupported_message_type");
+
+  state.lastIncomingAt = Date.now();
+  state.lastIncomingFrom = jid;
+  state.lastIncomingTextPreview = text.slice(0, 160);
+  state.incomingCount += 1;
 
   try {
     await state.sock?.sendPresenceUpdate?.("composing", jid);
     const reply = await generateAiReply(jid, text);
     await state.sock?.sendMessage(jid, { text: reply }, { quoted: msg });
+    state.lastReplyTarget = jid;
+    state.lastReplyTextPreview = reply.slice(0, 160);
+    state.lastSendError = null;
     state.lastAutoReplyAt = Date.now();
     state.autoReplyCount += 1;
   } catch (e) {
     state.lastAiError = e.message;
+    state.lastSendError = e.message;
     console.error("auto reply failed", e);
     try {
       await state.sock?.sendMessage(jid, { text: "Tive uma instabilidade momentânea no atendimento. Pode me enviar sua mensagem novamente, por favor?" }, { quoted: msg });
@@ -333,7 +363,8 @@ app.put("/api/whatsapp/config", auth, (req, res) => {
 app.get("/api/whatsapp/diagnostics", auth, (_req, res) => {
   res.json({ ok: true, static_mode: false, checks: [
     { id: "baileys-backend", ok: true, label: "Backend Baileys ativo", msg: "Serviço WhatsApp publicado e respondendo.", hint: state.connected ? "WhatsApp conectado." : state.qrDataUrl ? "QR Code disponível para leitura." : "Se ficar inicializando por mais de 30s, gere uma nova sessão." },
-    { id: "ollama", ok: !state.lastAiError && (!!OLLAMA_BASE_URL || !!AI_ROUTER_URL), label: "Resposta automática IA", msg: state.lastAiError ? `Última falha: ${state.lastAiError}` : (OLLAMA_BASE_URL ? "Backend ligado direto ao Ollama." : "Backend ligado ao ai-router/Ollama."), hint: state.lastAutoReplyAt ? `Última resposta enviada: ${new Date(state.lastAutoReplyAt).toLocaleString("pt-BR")}` : "Envie uma mensagem para este WhatsApp para testar a resposta automática." },
+    { id: "messages", ok: !!state.lastIncomingAt || state.autoReplyCount > 0, label: "Mensagens recebidas", msg: state.lastIncomingAt ? `Última mensagem recebida: ${new Date(state.lastIncomingAt).toLocaleString("pt-BR")}` : "Nenhuma mensagem nova chegou ao backend desde que ele iniciou.", hint: state.lastIgnoredReason ? `Última ignorada: ${state.lastIgnoredReason}` : "Envie mensagem de outro celular; mensagens enviadas pelo próprio WhatsApp conectado são ignoradas." },
+    { id: "ollama", ok: !state.lastAiError && (!!OLLAMA_BASE_URL || !!AI_ROUTER_URL), label: "Resposta automática IA", msg: state.lastAiError ? `Última falha: ${state.lastAiError}` : (OLLAMA_BASE_URL ? "Backend ligado direto ao Ollama." : "Backend ligado ao ai-router/Ollama."), hint: state.lastAutoReplyAt ? `Última resposta enviada: ${new Date(state.lastAutoReplyAt).toLocaleString("pt-BR")}` : "Ollama está ok; falta chegar uma mensagem válida para disparar a resposta." },
   ] });
 });
 
@@ -355,6 +386,16 @@ app.get("/api/whatsapp/baileys/status", auth, (_req, res) => {
     ai_router_url: AI_ROUTER_URL,
     ollama_model: OLLAMA_MODEL,
     last_ai_error: state.lastAiError,
+    last_incoming_at: state.lastIncomingAt,
+    last_incoming_from: state.lastIncomingFrom,
+    last_incoming_text_preview: state.lastIncomingTextPreview,
+    incoming_count: state.incomingCount,
+    last_ignored_at: state.lastIgnoredAt,
+    last_ignored_reason: state.lastIgnoredReason,
+    ignored_count: state.ignoredCount,
+    last_reply_target: state.lastReplyTarget,
+    last_reply_text_preview: state.lastReplyTextPreview,
+    last_send_error: state.lastSendError,
     last_auto_reply_at: state.lastAutoReplyAt,
     auto_reply_count: state.autoReplyCount,
   });
