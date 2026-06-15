@@ -29,6 +29,8 @@ const DEFAULT_BOT_PROMPT = `Você é a secretária jurídica da Dra. Kênia Garc
 Responda sempre em português do Brasil, com tom humano, acolhedor, profissional e objetivo.
 Nunca diga que é IA, robô, chatbot ou modelo. Não use markdown extenso nem HTML.
 Faça uma pergunta por vez, mantenha continuidade pelo histórico e encaminhe para agendamento quando fizer sentido.
+Nunca fale como se fosse o cliente em primeira pessoa. É proibido iniciar ou responder com "estou precisando", "preciso", "quero" ou frases semelhantes quando estiver reformulando a fala do cliente.
+Sempre converta para segunda pessoa: "Você está precisando de ajuda, certo?" ou "Você está precisando de alguma informação jurídica, certo?".
 
 # REGRAS DE CONVERSA (NÃO REPITA, VARIE O VOCABULÁRIO)
 - Releia TODO o histórico antes de responder. NUNCA repita uma pergunta cuja resposta já foi dada (mesmo que parcial ou com sinônimos: "moro em SP" = cidade já informada).
@@ -89,6 +91,28 @@ const APPT_KEY = SUPABASE_SERVICE_KEY || SUPABASE_ANON_KEY;
 
 const stripAgendamentoBlock = (text = "") =>
   text.replace(/<AGENDAMENTO>[\s\S]*?<\/AGENDAMENTO>/gi, "").replace(/\n{3,}/g, "\n\n").trim();
+
+const normalizePortuguese = (value = "") =>
+  String(value || "")
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/["“”'`´]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+const enforceSecretarySecondPerson = (reply = "") => {
+  const text = String(reply || "").trim();
+  if (!text) return text;
+  const normalized = normalizePortuguese(text);
+  const startsWithLegalInfo = /^(?:eu\s+)?(?:(?:estou|to|tou)\s+precisando|preciso)\s+de\s+(?:alguma\s+)?informacao\s+juridica\b/.test(normalized);
+  const startsWithHelp = /^(?:eu\s+)?(?:(?:estou|to|tou)\s+precisando|preciso)\s+de\s+ajuda\b/.test(normalized);
+  if (startsWithLegalInfo) return "Você está precisando de alguma informação jurídica, certo?";
+  if (startsWithHelp) return "Você está precisando de ajuda, certo?";
+  return text
+    .replace(/\b(?:eu\s+)?(?:(?:estou|t[oô]u)\s+precisando|preciso)\s+de\s+(?:alguma\s+)?informa[cç][aã]o\s+jur[ií]dica\b/giu, "Você está precisando de alguma informação jurídica, certo?")
+    .replace(/\b(?:eu\s+)?(?:(?:estou|t[oô]u)\s+precisando|preciso)\s+de\s+ajuda\b/giu, "Você está precisando de ajuda, certo?");
+};
 
 const parseAgendamentoBlock = (text = "") => {
   const m = text.match(/<AGENDAMENTO>\s*([\s\S]*?)\s*<\/AGENDAMENTO>/i);
@@ -455,9 +479,10 @@ async function generateAiReply(jid, text) {
     return null;
   });
   if (emergentReply) {
-    rememberMessage(jid, "assistant", emergentReply);
+    const safeReply = enforceSecretarySecondPerson(emergentReply);
+    rememberMessage(jid, "assistant", safeReply);
     state.lastAiError = null;
-    return emergentReply;
+    return safeReply;
   }
 
   const directReply = await generateDirectOllamaReply(messages).catch((e) => {
@@ -465,9 +490,10 @@ async function generateAiReply(jid, text) {
     return null;
   });
   if (directReply) {
-    rememberMessage(jid, "assistant", directReply);
+    const safeReply = enforceSecretarySecondPerson(directReply);
+    rememberMessage(jid, "assistant", safeReply);
     state.lastAiError = null;
-    return directReply;
+    return safeReply;
   }
 
   const controller = new AbortController();
@@ -485,7 +511,7 @@ async function generateAiReply(jid, text) {
     const raw = await r.text();
     if (!r.ok) throw new Error(`ai-router_${r.status}: ${raw.slice(0, 300)}`);
     const data = JSON.parse(raw || "{}");
-    const reply = String(data.text || data.response || "").trim();
+    const reply = enforceSecretarySecondPerson(String(data.text || data.response || "").trim());
     if (!reply) throw new Error("ai-router_empty_response");
     rememberMessage(jid, "assistant", reply);
     state.lastAiError = null;
