@@ -91,12 +91,64 @@ const getAppointmentDateTime = (date, time) => {
 };
 
 const WEEKDAYS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+const OFFICE_SLOTS = ["09:00", "10:00", "11:00", "14:00", "15:00", "16:00", "17:00"];
 
 const nextBusinessSlot = () => {
   const d = new Date();
   d.setDate(d.getDate() + 1);
   while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
   return { date: formatLocalDate(d), time: "10:00" };
+};
+
+const getAgendaSlots = async (limit = 4) => {
+  const { data } = await api.get("/appointments");
+  const appointments = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+  const occupied = new Set(
+    appointments
+      .filter((item) => !/cancelad|cancelled/i.test(String(item.status || "")))
+      .map((item) => {
+        const starts = item.starts_at || (item.appointment_date && item.appointment_time
+          ? `${item.appointment_date}T${String(item.appointment_time).slice(0, 5)}`
+          : "");
+        if (!starts) return "";
+        const d = new Date(starts);
+        if (Number.isNaN(d.getTime())) return "";
+        return `${formatLocalDate(d)}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+      })
+      .filter(Boolean)
+  );
+  const now = new Date();
+  const slots = [];
+  for (let i = 0; i < 14 && slots.length < limit; i += 1) {
+    const d = new Date();
+    d.setDate(d.getDate() + i);
+    d.setHours(12, 0, 0, 0);
+    if (d.getDay() === 0 || d.getDay() === 6) continue;
+    const date = formatLocalDate(d);
+    for (const time of OFFICE_SLOTS) {
+      const candidate = new Date(`${date}T${time}:00`);
+      if (candidate <= now) continue;
+      if (occupied.has(`${date}T${time}`)) continue;
+      slots.push({ date, time, weekday: WEEKDAYS[candidate.getDay()] });
+      if (slots.length >= limit) break;
+    }
+  }
+  return slots;
+};
+
+const formatSlot = (slot) => {
+  const d = new Date(`${slot.date}T${slot.time}:00`);
+  return `${slot.weekday || WEEKDAYS[d.getDay()]}, ${d.toLocaleDateString("pt-BR")} às ${slot.time}`;
+};
+
+const buildScheduleContext = (slots = []) => {
+  if (!slots.length) return "AGENDA DA DRA. KÊNIA: sem horários livres próximos confirmados pelo painel.";
+  return `AGENDA REAL DA DRA. KÊNIA — ofereça somente estes horários livres: ${slots.map(formatSlot).join("; ")}.`;
+};
+
+const buildAvailableSlotsMessage = (slots = []) => {
+  if (!slots.length) return "No momento não localizei horários livres próximos na agenda. Posso tentar verificar novamente em instantes.";
+  return `Consultei a agenda da Dra. Kênia e tenho estes horários livres: ${slots.slice(0, 3).map(formatSlot).join("; ")}. Qual fica melhor para você?`;
 };
 
 const extractScheduleIntent = (text) => {
