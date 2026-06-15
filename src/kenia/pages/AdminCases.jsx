@@ -54,11 +54,21 @@ export default function AdminCases() {
   const openDetail = async (item) => {
     setSelected(item);
     setAdminNotes(item.admin_notes || "");
+    // Optimistic fallback: mostra o painel mesmo antes da resposta do backend
+    setDetail({ analysis: item, messages: [] });
     try {
       const { data } = await api.get(`/admin/case-analyses/${item.id}`);
-      setDetail(data);
-    } catch {
-      toast.error("Erro ao abrir detalhe");
+      if (data?.analysis || data?.messages) {
+        setDetail({
+          analysis: data.analysis || item,
+          messages: data.messages || [],
+        });
+        if (data.analysis) setSelected(data.analysis);
+      }
+    } catch (err) {
+      // Backend pode não ter o endpoint de detalhe (ex.: Render sem essa rota).
+      // Mantemos o painel aberto com os dados que já temos da lista.
+      console.warn("[AdminCases] detalhe indisponível, usando dados da lista", err);
     }
   };
 
