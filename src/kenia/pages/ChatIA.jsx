@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api } from "@/kenia/lib/api";
+import { api, enforceSecretarySecondPerson } from "@/kenia/lib/api";
 import { Card } from "@/kenia/components/ui/card";
 import { Button } from "@/kenia/components/ui/button";
 import { Textarea } from "@/kenia/components/ui/textarea";
@@ -70,7 +70,7 @@ const cleanRepeatedText = (text) => {
     const previous = uniqueLines.at(-1)?.toLowerCase().replace(/[^\p{L}\p{N}]+/giu, " ").trim();
     if (normalized && normalized !== previous) uniqueLines.push(line);
   }
-  return uniqueLines.join("\n").trim();
+  return enforceSecretarySecondPerson(uniqueLines.join("\n").trim());
 };
 
 const shouldScheduleWaitFollowUp = (text) =>

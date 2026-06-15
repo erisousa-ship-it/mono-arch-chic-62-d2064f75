@@ -102,8 +102,8 @@ Trate todas as informações do cliente com sigilo, discrição e profissionalis
 
 - Responda sempre em português do Brasil.
 - Use linguagem humana, clara, acolhedora, objetiva e profissional.
-- Nunca confirme a necessidade do cliente em primeira pessoa. Quando reformular o que o cliente disse, converta para segunda pessoa: cliente diz "estou precisando de informação jurídica" → responda "Você está precisando de alguma informação jurídica, certo?".
-- Validação final obrigatória: se a resposta gerada começar ou contiver "estou precisando de informação jurídica", substitua por "Você está precisando de alguma informação jurídica, certo?" antes de enviar.
+- Nunca confirme a necessidade do cliente em primeira pessoa. Quando reformular o que o cliente disse, converta para segunda pessoa: cliente diz "estou precisando de informação jurídica" → responda exatamente "Você está precisando de alguma informação jurídica, certo".
+- Validação final obrigatória: se a resposta gerada começar ou contiver "estou precisando de informação jurídica", substitua por exatamente "Você está precisando de alguma informação jurídica, certo" antes de enviar.
 - É proibido iniciar respostas com "estou precisando", "preciso", "quero" ou frases que pareçam ser fala do cliente. A resposta sempre deve falar SOBRE o cliente usando "você".
 - Faça uma pergunta por vez quando precisar coletar dados.
 - Evite respostas longas, frias, repetitivas ou mecânicas.
@@ -441,17 +441,17 @@ const startsWithClientFirstPersonNeed = (reply) => {
     /^(?:eu\s+)?preciso\s+de\s+(?:alguma\s+)?informacao\s+juridica\b/.test(text);
 };
 
-const rewriteClientFirstPersonAsSecondPerson = (reply) => {
+export const enforceSecretarySecondPerson = (reply) => {
   const text = String(reply || "").trim();
   if (!text) return text;
   if (startsWithClientFirstPersonNeed(text)) {
-    return "Você está precisando de alguma informação jurídica, certo? Pode me contar qual é a sua dúvida principal?";
+    return "Você está precisando de alguma informação jurídica, certo";
   }
-  return text.replace(/\b(?:eu\s+)?(?:estou\s+)?precisando\s+de\s+(?:alguma\s+)?informa[cç][aã]o\s+jur[ií]dica\b/giu, "Você está precisando de alguma informação jurídica");
+  return text.replace(/\b(?:eu\s+)?(?:estou\s+)?precisando\s+de\s+(?:alguma\s+)?informa[cç][aã]o\s+jur[ií]dica\b/giu, "Você está precisando de alguma informação jurídica, certo");
 };
 
 const sanitizeAssistantReply = (reply, userMessage = "") =>
-  rewriteClientFirstPersonAsSecondPerson(
+  enforceSecretarySecondPerson(
     removeUnaskedTemporalLeaks(removeAssistantMetaPreamble(reply), userMessage)
       .replace(/^["“”'`]+|["“”'`]+$/g, "")
       .trim()
@@ -798,6 +798,17 @@ const read = (key, fallback) => {
 };
 const write = (key, value) => localStorage.setItem(`static_api_${key}`, JSON.stringify(value));
 const response = (data, status = 200, headers = {}) => Promise.resolve({ data: clone(data), status, statusText: "OK", headers, config: {} });
+const sanitizeWhatsAppTextPayload = (payload) => {
+  if (Array.isArray(payload)) return payload.map(sanitizeWhatsAppTextPayload);
+  if (!payload || typeof payload !== "object") return payload;
+  return {
+    ...payload,
+    ...(typeof payload.text === "string" ? { text: enforceSecretarySecondPerson(payload.text) } : {}),
+    ...(typeof payload.last_message === "string" ? { last_message: enforceSecretarySecondPerson(payload.last_message) } : {}),
+    ...(typeof payload.response === "string" ? { response: enforceSecretarySecondPerson(payload.response) } : {}),
+    ...(payload.message && typeof payload.message === "object" ? { message: sanitizeWhatsAppTextPayload(payload.message) } : {}),
+  };
+};
 const nextId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 const buildJitsiLink = (seed) => {
@@ -854,8 +865,8 @@ const staticGet = async (url, config = {}) => {
   if (path === "/whatsapp/config") return response(withCurrentBotPrompt(read("whatsapp_config", defaultWhatsAppConfig)));
   if (path === "/crm/stages") return response(stages);
   if (path === "/leads") return response(read("leads", seedLeads));
-  if (path === "/whatsapp/contacts") return response(read("contacts", seedContacts));
-  if (path.startsWith("/whatsapp/messages/")) return response(read("messages", seedMessages)[path.split("/").pop()] || []);
+  if (path === "/whatsapp/contacts") return response(sanitizeWhatsAppTextPayload(read("contacts", seedContacts)));
+  if (path.startsWith("/whatsapp/messages/")) return response(sanitizeWhatsAppTextPayload(read("messages", seedMessages)[path.split("/").pop()] || []));
   if (path === "/dashboard/metrics") return response(getMetrics());
   if (path === "/legal-deadlines") return response(read("legal_deadlines", seedLegalDeadlines));
   if (path === "/processes") return response(read("processes", seedProcesses));
@@ -884,7 +895,7 @@ const staticGet = async (url, config = {}) => {
   if (path === "/whatsapp/qr" || path === "/whatsapp/qr/image") return response({ connected: false, error: "STATIC_MODE", fallback: true });
   if (path === "/whatsapp/baileys/status") return response({ ok: true, connected: false, state: "static", last_error: "Modo site estático ativo. Para conectar WhatsApp real, publique também um backend e configure VITE_BACKEND_URL." });
   if (path === "/whatsapp/baileys/qr") return response({ qr: null, state: "static" });
-  if (path === "/whatsapp/logs") return response(read("logs", seedLogs));
+  if (path === "/whatsapp/logs") return response(sanitizeWhatsAppTextPayload(read("logs", seedLogs)));
   if (path === "/whatsapp/bot-delivery-stats") return response({ total_bot: 1, total_failures: 0, recent_failures: [] });
   if (path === "/debug/instructions") return response(read("debug_instructions", []));
   if (path === "/admin/case-analyses") {
@@ -1422,6 +1433,9 @@ export const api = HAS_BACKEND
           if (path === "/whatsapp/config") {
             return { ...res, data: withCurrentBotPrompt(res?.data || {}) };
           }
+          if (path === "/whatsapp/contacts" || path === "/whatsapp/logs" || path.startsWith("/whatsapp/messages/")) {
+            return { ...res, data: sanitizeWhatsAppTextPayload(res?.data) };
+          }
           return res;
         } catch (err) {
           if (backendSafeGetPaths.has(path)) return staticGet(url, config);
@@ -1434,6 +1448,7 @@ export const api = HAS_BACKEND
         if (path.startsWith("/legal-deadlines/")) return staticPost(url, body);
         if (cloudFirstPostPaths.has(path)) return staticPost(url, body);
         if (path === "/chat/message") return staticPost(url, body);
+        if (path === "/whatsapp/send") return liveRequest("post", url, body, config).then((res) => ({ ...res, data: sanitizeWhatsAppTextPayload(res?.data) })).catch(() => staticPost(url, body));
         if (liveFirstWithStaticFallbackPostPaths.has(path)) {
           return liveRequest("post", url, body, config).catch(() => staticPost(url, body));
         }
@@ -1453,6 +1468,9 @@ export const api = HAS_BACKEND
           try {
             const res = await liveRequest("get", url, config);
             if (path === "/whatsapp/config") return { ...res, data: withCurrentBotPrompt(res?.data || {}) };
+            if (path === "/whatsapp/contacts" || path === "/whatsapp/logs" || path.startsWith("/whatsapp/messages/")) {
+              return { ...res, data: sanitizeWhatsAppTextPayload(res?.data) };
+            }
             return res;
           } catch {
             return staticGet(url, config);
@@ -1463,7 +1481,7 @@ export const api = HAS_BACKEND
       post: (url, body, config) => {
         const [path] = String(url).split("?");
         if (hasBackend() && (path.startsWith("/whatsapp/") || fallbackToStaticPostPaths.has(path))) {
-          return liveRequest("post", url, body, config).catch(() => staticPost(url, body));
+          return liveRequest("post", url, body, config).then((res) => ({ ...res, data: sanitizeWhatsAppTextPayload(res?.data) })).catch(() => staticPost(url, body));
         }
         return staticPost(url, body);
       },
