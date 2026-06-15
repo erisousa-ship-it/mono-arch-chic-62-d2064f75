@@ -793,5 +793,9 @@ app.post("/api/whatsapp/logout", auth, async (_req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Kenia WhatsApp backend on :${PORT}`);
-  startSock().catch((e) => console.error("startSock failed", e));
+  console.log(`[persistAuth] enabled=${persistEnabled}`);
+  (async () => {
+    try { await restoreAuthDir(AUTH_DIR); } catch (e) { console.warn("restore failed", e.message); }
+    startSock().catch((e) => console.error("startSock failed", e));
+  })();
 });
