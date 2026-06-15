@@ -87,6 +87,22 @@ function enforceSecondPerson(reply = "") {
     .replace(/\b(?:eu\s+)?(?:(?:estou|t[oô]u)\s+precisando|preciso)\s+de\s+ajuda\b/giu, "Você está precisando de ajuda, certo?");
 }
 
+const SAFE_FALLBACK_REPLY = "Como posso ajudar com seu atendimento?";
+const PROMPT_LEAK_PATTERNS = [
+  /##\s*(OBJETIVO|REGRAS?|FLUXO|MEM[ÓO]RIA|DASHBOARD|AGENDAMENTO|IDENTIDADE|TOM|ESTILO)/i,
+  /\b(bot_prompt|DEFAULT_PROMPT|SYSTEM\s*PROMPT|prompt\s+do\s+sistema|instru[cç][õo]es\s+internas|regras\s+internas|configura[cç][õo]es\s+do\s+sistema)\b/i,
+  /\bAtue\s+como\s+secret[áa]ria\b/i,
+  /CONTEXTO\s+TEMPORAL\s+INTERNO/i,
+  /INSTRU[CÇ][ÃA]O\s+(CR[ÍI]TICA|DE\s+DESENVOLVIMENTO)/i,
+  /^\s*[#`]{2,}/m,
+];
+function stripPromptLeak(reply = "") {
+  const text = String(reply || "");
+  if (!text.trim()) return text;
+  if (PROMPT_LEAK_PATTERNS.some((re) => re.test(text))) return SAFE_FALLBACK_REPLY;
+  return text;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -180,7 +196,7 @@ Deno.serve(async (req) => {
     let payload: any = null;
     try { payload = JSON.parse(call?.function?.arguments || "{}"); } catch { payload = {}; }
 
-    const reply = enforceSecondPerson(payload?.response || data?.choices?.[0]?.message?.content || "Pode me contar um pouco mais sobre o que aconteceu?");
+    const reply = enforceSecondPerson(stripPromptLeak(payload?.response || data?.choices?.[0]?.message?.content || "Pode me contar um pouco mais sobre o que aconteceu?"));
     const analysis = return_analysis ? (payload?.analysis || null) : null;
 
     return json({

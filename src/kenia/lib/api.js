@@ -535,9 +535,26 @@ export const enforceSecretarySecondPerson = (reply) => {
     .replace(/\b(?:eu\s+)?(?:(?:estou|t[oô]u)\s+precisando|preciso)\s+de\s+ajuda\b/giu, HELP_SECOND_PERSON_REPLY);
 };
 
+const SAFE_FALLBACK_REPLY = "Como posso ajudar com seu atendimento?";
+const PROMPT_LEAK_PATTERNS = [
+  /##\s*(OBJETIVO|REGRAS?|FLUXO|MEM[ÓO]RIA|DASHBOARD|AGENDAMENTO|IDENTIDADE|TOM|ESTILO)/i,
+  /\b(bot_prompt|DEFAULT_PROMPT|SYSTEM\s*PROMPT|prompt\s+do\s+sistema|instru[cç][õo]es\s+internas|regras\s+internas|configura[cç][õo]es\s+do\s+sistema)\b/i,
+  /\bAtue\s+como\s+secret[áa]ria\b/i,
+  /<AGENDAMENTO>|<\/AGENDAMENTO>/i,
+  /^\s*[#`]{2,}/m,
+  /CONTEXTO\s+TEMPORAL\s+INTERNO/i,
+  /INSTRU[CÇ][ÃA]O\s+(CR[ÍI]TICA|DE\s+DESENVOLVIMENTO)/i,
+];
+export const stripPromptLeak = (reply) => {
+  const text = String(reply || "");
+  if (!text.trim()) return text;
+  if (PROMPT_LEAK_PATTERNS.some((re) => re.test(text))) return SAFE_FALLBACK_REPLY;
+  return text;
+};
+
 const sanitizeAssistantReply = (reply, userMessage = "") =>
   enforceSecretarySecondPerson(
-    removeUnaskedTemporalLeaks(removeAssistantMetaPreamble(reply), userMessage)
+    stripPromptLeak(removeUnaskedTemporalLeaks(removeAssistantMetaPreamble(reply), userMessage))
       .replace(/^["“”'`]+|["“”'`]+$/g, "")
       .trim()
   );
@@ -979,9 +996,9 @@ const sanitizeWhatsAppTextPayload = (payload) => {
   if (!payload || typeof payload !== "object") return payload;
   return {
     ...payload,
-    ...(typeof payload.text === "string" ? { text: enforceSecretarySecondPerson(payload.text) } : {}),
-    ...(typeof payload.last_message === "string" ? { last_message: enforceSecretarySecondPerson(payload.last_message) } : {}),
-    ...(typeof payload.response === "string" ? { response: enforceSecretarySecondPerson(payload.response) } : {}),
+    ...(typeof payload.text === "string" ? { text: enforceSecretarySecondPerson(stripPromptLeak(payload.text)) } : {}),
+    ...(typeof payload.last_message === "string" ? { last_message: enforceSecretarySecondPerson(stripPromptLeak(payload.last_message)) } : {}),
+    ...(typeof payload.response === "string" ? { response: enforceSecretarySecondPerson(stripPromptLeak(payload.response)) } : {}),
     ...(payload.message && typeof payload.message === "object" ? { message: sanitizeWhatsAppTextPayload(payload.message) } : {}),
   };
 };

@@ -114,6 +114,23 @@ const enforceSecretarySecondPerson = (reply = "") => {
     .replace(/\b(?:eu\s+)?(?:(?:estou|t[oô]u)\s+precisando|preciso)\s+de\s+ajuda\b/giu, "Você está precisando de ajuda, certo?");
 };
 
+const SAFE_FALLBACK_REPLY = "Como posso ajudar com seu atendimento?";
+const PROMPT_LEAK_PATTERNS = [
+  /##\s*(OBJETIVO|REGRAS?|FLUXO|MEM[ÓO]RIA|DASHBOARD|AGENDAMENTO|IDENTIDADE|TOM|ESTILO)/i,
+  /\b(bot_prompt|DEFAULT_PROMPT|SYSTEM\s*PROMPT|prompt\s+do\s+sistema|instru[cç][õo]es\s+internas|regras\s+internas|configura[cç][õo]es\s+do\s+sistema)\b/i,
+  /\bAtue\s+como\s+secret[áa]ria\b/i,
+  /CONTEXTO\s+TEMPORAL\s+INTERNO/i,
+  /INSTRU[CÇ][ÃA]O\s+(CR[ÍI]TICA|DE\s+DESENVOLVIMENTO)/i,
+  /^\s*[#`]{2,}/m,
+];
+const stripPromptLeak = (reply = "") => {
+  const text = String(reply || "");
+  if (!text.trim()) return text;
+  if (PROMPT_LEAK_PATTERNS.some((re) => re.test(text))) return SAFE_FALLBACK_REPLY;
+  return text;
+};
+const sanitizeOutbound = (reply) => enforceSecretarySecondPerson(stripPromptLeak(reply));
+
 const parseAgendamentoBlock = (text = "") => {
   const m = text.match(/<AGENDAMENTO>\s*([\s\S]*?)\s*<\/AGENDAMENTO>/i);
   if (!m) return null;
@@ -479,7 +496,7 @@ async function generateAiReply(jid, text) {
     return null;
   });
   if (emergentReply) {
-    const safeReply = enforceSecretarySecondPerson(emergentReply);
+    const safeReply = sanitizeOutbound(emergentReply);
     rememberMessage(jid, "assistant", safeReply);
     state.lastAiError = null;
     return safeReply;
@@ -490,7 +507,7 @@ async function generateAiReply(jid, text) {
     return null;
   });
   if (directReply) {
-    const safeReply = enforceSecretarySecondPerson(directReply);
+    const safeReply = sanitizeOutbound(directReply);
     rememberMessage(jid, "assistant", safeReply);
     state.lastAiError = null;
     return safeReply;
@@ -511,7 +528,7 @@ async function generateAiReply(jid, text) {
     const raw = await r.text();
     if (!r.ok) throw new Error(`ai-router_${r.status}: ${raw.slice(0, 300)}`);
     const data = JSON.parse(raw || "{}");
-    const reply = enforceSecretarySecondPerson(String(data.text || data.response || "").trim());
+    const reply = sanitizeOutbound(String(data.text || data.response || "").trim());
     if (!reply) throw new Error("ai-router_empty_response");
     rememberMessage(jid, "assistant", reply);
     state.lastAiError = null;
