@@ -113,6 +113,51 @@ const parseAgendamentoBlock = (text) => {
   }
 };
 
+const isScheduleChangeRequest = (text) =>
+  /\b(reagendar|remarcar|alterar|trocar|mudar|adiar|antecipar|cancelar|desmarcar)\b/i.test(String(text || ""));
+
+const isSimpleConfirmation = (text) =>
+  /^(sim|s|ok|okay|certo|confirmo|confirmado|pode ser|isso|isso mesmo|esse mesmo|perfeito|fechado|combinado|claro)\.?$/i.test(String(text || "").trim());
+
+const hasScheduleOffer = (text) =>
+  /\b(?:deseja|quer|queria|gostaria|posso|podemos|vamos)\b[\s\S]{0,90}\b(?:agendar|marcar|encaixar|consulta|hor[aá]rio)\b/i.test(String(text || "")) ||
+  /\b(?:tenho|temos)\s+(?:estes|esses|alguns)?\s*hor[aá]rios\b/i.test(String(text || "")) ||
+  /\bqual\s+(?:hor[aá]rio|data|dia)\s+prefere\b/i.test(String(text || ""));
+
+const inferConfirmedAppointment = (list = []) => {
+  const assistantMessages = (Array.isArray(list) ? list : []).filter((m) => m.role !== "user").reverse();
+  for (const item of assistantMessages) {
+    const content = String(item?.content || "");
+    if (!/(consulta|agendamento).{0,80}(agendad|confirmad|registrad|salv)/i.test(content) && !/link da sala/i.test(content)) continue;
+    const meetUrl = content.match(/https?:\/\/[^\s)]+/i)?.[0] || "";
+    const human =
+      content.match(/agendada\s+para\s+([^\n(]+(?:\([^\n)]*\))?)/i)?.[1]?.trim() ||
+      content.match(/confirmad[oa]:?\s*([^\n.]+)/i)?.[1]?.trim() ||
+      "a data e horário combinados";
+    return { human, meetUrl, duration: 60 };
+  }
+  return null;
+};
+
+const buildAlreadyConfirmedMessage = (appointment) => {
+  const when = appointment?.human || "a data e horário combinados";
+  const link = appointment?.meetUrl ? `\n\n🔗 Link da sala: ${appointment.meetUrl}` : "";
+  return `✅ Sua consulta já está confirmada para ${when}.${link}\n\nSe precisar alterar ou cancelar, me avise; caso contrário, não é necessário agendar de novo.`;
+};
+
+const stripScheduleOffersAfterConfirmation = (reply, appointment) => {
+  const text = String(reply || "").replace(/<AGENDAMENTO>[\s\S]*?<\/AGENDAMENTO>/gi, "").trim();
+  if (!hasScheduleOffer(text)) return text;
+  const kept = text
+    .split(/(?<=[.!?])\s+|\n+/)
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter((part) => !hasScheduleOffer(part))
+    .join(" ")
+    .trim();
+  return kept || buildAlreadyConfirmedMessage(appointment);
+};
+
 const extractScheduleIntent = (text) => {
   const lower = text.toLowerCase();
   if (!SCHEDULE_REGEX.test(lower)) return null;
