@@ -798,6 +798,17 @@ const read = (key, fallback) => {
 };
 const write = (key, value) => localStorage.setItem(`static_api_${key}`, JSON.stringify(value));
 const response = (data, status = 200, headers = {}) => Promise.resolve({ data: clone(data), status, statusText: "OK", headers, config: {} });
+const sanitizeWhatsAppTextPayload = (payload) => {
+  if (Array.isArray(payload)) return payload.map(sanitizeWhatsAppTextPayload);
+  if (!payload || typeof payload !== "object") return payload;
+  return {
+    ...payload,
+    ...(typeof payload.text === "string" ? { text: enforceSecretarySecondPerson(payload.text) } : {}),
+    ...(typeof payload.last_message === "string" ? { last_message: enforceSecretarySecondPerson(payload.last_message) } : {}),
+    ...(typeof payload.response === "string" ? { response: enforceSecretarySecondPerson(payload.response) } : {}),
+    ...(payload.message && typeof payload.message === "object" ? { message: sanitizeWhatsAppTextPayload(payload.message) } : {}),
+  };
+};
 const nextId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
 
 const buildJitsiLink = (seed) => {
@@ -884,7 +895,7 @@ const staticGet = async (url, config = {}) => {
   if (path === "/whatsapp/qr" || path === "/whatsapp/qr/image") return response({ connected: false, error: "STATIC_MODE", fallback: true });
   if (path === "/whatsapp/baileys/status") return response({ ok: true, connected: false, state: "static", last_error: "Modo site estático ativo. Para conectar WhatsApp real, publique também um backend e configure VITE_BACKEND_URL." });
   if (path === "/whatsapp/baileys/qr") return response({ qr: null, state: "static" });
-  if (path === "/whatsapp/logs") return response(read("logs", seedLogs));
+  if (path === "/whatsapp/logs") return response(sanitizeWhatsAppTextPayload(read("logs", seedLogs)));
   if (path === "/whatsapp/bot-delivery-stats") return response({ total_bot: 1, total_failures: 0, recent_failures: [] });
   if (path === "/debug/instructions") return response(read("debug_instructions", []));
   if (path === "/admin/case-analyses") {
