@@ -304,6 +304,16 @@ async function generateAiReply(jid, text) {
     ...history,
   ];
 
+  const emergentReply = await callEmergentChat({ messages }).catch((e) => {
+    state.lastAiError = e.message;
+    return null;
+  });
+  if (emergentReply) {
+    rememberMessage(jid, "assistant", emergentReply);
+    state.lastAiError = null;
+    return emergentReply;
+  }
+
   const directReply = await generateDirectOllamaReply(messages).catch((e) => {
     state.lastAiError = e.message;
     return null;
