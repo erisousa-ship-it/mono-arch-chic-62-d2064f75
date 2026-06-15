@@ -5,3 +5,6 @@ minimum_password_length = 3
 
 [functions.ai-router]
 verify_jwt = false
+
+[functions.generate-cover-image]
+verify_jwt = false
