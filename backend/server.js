@@ -267,12 +267,24 @@ const callEmergentImage = async ({ prompt, style = "", reference_image_base64 = 
 };
 
 const callLovableImage = async ({ prompt, style = "" }) => {
-  if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY não configurada");
   const finalPrompt = [
     "Crie um criativo jurídico profissional para a Dra. Kênia Garcia, sem texto e sem letras dentro da imagem.",
     style ? `Formato/estilo: ${style}.` : "",
     `Tema: ${prompt}`,
   ].filter(Boolean).join("\n");
+  if (!LOVABLE_API_KEY) {
+    const r = await fetch(AI_ROUTER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(SUPABASE_ANON_KEY ? { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } : {}) },
+      body: JSON.stringify({ mode: "image", prompt: finalPrompt }),
+    });
+    const raw = await r.text();
+    if (!r.ok) throw new Error(`lovable_edge_image_${r.status}: ${raw.slice(0, 500)}`);
+    const data = JSON.parse(raw || "{}");
+    if (data.image?.startsWith("data:")) return { image_base64: data.image.split(",")[1], mime_type: "image/png" };
+    if (data.image) return { image_url: data.image, mime_type: "image/png" };
+    throw new Error("lovable_edge_image_empty_response");
+  }
   const r = await fetch("https://ai.gateway.lovable.dev/v1/images/generations", {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${LOVABLE_API_KEY}` },
