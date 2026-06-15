@@ -44,6 +44,51 @@ Deno.serve(async (req) => {
     if (logoUrl) userContent.push({ type: "image_url", image_url: { url: logoUrl } });
 
     const errors: string[] = [];
+
+    // 1) PRIMÁRIO: Lovable AI Gateway (Nano Banana / gpt-image-2)
+    const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+    if (lovableKey) {
+      try {
+        const resp = await fetch("https://ai.gateway.lovable.dev/v1/images/generations", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify({
+            model: "google/gemini-2.5-flash-image-preview",
+            prompt: userText,
+            quality: "low",
+            size: "1024x1024",
+            n: 1,
+            stream: false,
+          }),
+        });
+        const raw = await resp.text();
+        if (resp.ok) {
+          const data = JSON.parse(raw || "{}");
+          const dataUrl = parseImageResponse(data);
+          if (dataUrl) {
+            const b64Only = dataUrl.startsWith("data:") ? dataUrl.split(",")[1] : dataUrl;
+            return new Response(JSON.stringify({ image_data_url: dataUrl, b64_json: b64Only, provider: "lovable" }), {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+          errors.push("lovable: empty response");
+        } else {
+          errors.push(`lovable_${resp.status}: ${raw.slice(0, 300)}`);
+          if (resp.status === 429 || resp.status === 402) {
+            return new Response(JSON.stringify({ error: errors.join(" | "), upstream_status: resp.status }), {
+              status: resp.status,
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+        }
+      } catch (e) {
+        errors.push(`lovable: ${String(e)}`);
+      }
+    } else {
+      errors.push("Missing LOVABLE_API_KEY");
+    }
+
+    // 2) FALLBACK: Emergent
     const emergentKey = Deno.env.get("EMERGENT_API_KEY");
     const emergentUrl = (Deno.env.get("EMERGENT_BASE_URL") || "https://api.emergent.sh/v1").replace(/\/+$/, "");
     if (emergentKey) {
@@ -54,65 +99,26 @@ Deno.serve(async (req) => {
           body: JSON.stringify({ model: "gpt-image-1", prompt: userText, size: "1024x1024", n: 1 }),
         });
         const raw = await emergentResp.text();
-        if (!emergentResp.ok) throw new Error(`Emergent ${emergentResp.status}: ${raw.slice(0, 500)}`);
-        const data = JSON.parse(raw || "{}");
-        const dataUrl = parseImageResponse(data);
-        if (dataUrl) {
-          const b64Only = dataUrl.startsWith("data:") ? dataUrl.split(",")[1] : dataUrl;
-          return new Response(JSON.stringify({ image_data_url: dataUrl, b64_json: b64Only, provider: "emergent" }), {
-            headers: { ...corsHeaders, "Content-Type": "application/json" },
-          });
+        if (emergentResp.ok) {
+          const data = JSON.parse(raw || "{}");
+          const dataUrl = parseImageResponse(data);
+          if (dataUrl) {
+            const b64Only = dataUrl.startsWith("data:") ? dataUrl.split(",")[1] : dataUrl;
+            return new Response(JSON.stringify({ image_data_url: dataUrl, b64_json: b64Only, provider: "emergent" }), {
+              headers: { ...corsHeaders, "Content-Type": "application/json" },
+            });
+          }
+          errors.push("emergent: empty response");
+        } else {
+          errors.push(`emergent_${emergentResp.status}: ${raw.slice(0, 300)}`);
         }
-        throw new Error("Emergent sem imagem gerada");
       } catch (e) {
-        errors.push(String(e));
+        errors.push(`emergent: ${String(e)}`);
       }
-    } else {
-      errors.push("Missing EMERGENT_API_KEY");
     }
 
-    const key = Deno.env.get("LOVABLE_API_KEY");
-    if (!key) {
-      return new Response(JSON.stringify({ error: errors.join(" | ") || "Missing LOVABLE_API_KEY" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const resp = await fetch("https://ai.gateway.lovable.dev/v1/images/generations", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: "openai/gpt-image-2",
-        prompt: userText,
-        quality: "low",
-        size: "1024x1024",
-        n: 1,
-        stream: false,
-      }),
-    });
-
-    if (!resp.ok) {
-      const text = await resp.text();
-      const status = resp.status === 429 || resp.status === 402 ? resp.status : 500;
-      return new Response(JSON.stringify({ error: [...errors, text].join(" | "), upstream_status: resp.status }), {
-        status,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const data = await resp.json();
-    const dataUrl = parseImageResponse(data);
-
-    if (!dataUrl) {
-      return new Response(JSON.stringify({ error: "Sem imagem gerada", raw: data }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const b64Only = dataUrl.startsWith("data:") ? dataUrl.split(",")[1] : dataUrl;
-    return new Response(JSON.stringify({ image_data_url: dataUrl, b64_json: b64Only, provider: "lovable" }), {
+    return new Response(JSON.stringify({ error: errors.join(" | ") || "Sem provedor de imagem disponível" }), {
+      status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
