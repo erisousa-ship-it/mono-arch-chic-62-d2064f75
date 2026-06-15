@@ -117,6 +117,53 @@ Deno.serve(async (req) => {
       }
     }
 
+    // 3) FALLBACK: Google Gemini (Nano Banana) direct API
+    const geminiKey = Deno.env.get("GEMINI_API_KEY");
+    if (geminiKey) {
+      try {
+        const model = "gemini-2.5-flash-image";
+        const parts: any[] = [{ text: userText }];
+        if (refUrl) {
+          const b64 = refUrl.split(",")[1];
+          parts.push({ inline_data: { mime_type: "image/png", data: b64 } });
+        }
+        if (logoUrl) {
+          const b64 = logoUrl.split(",")[1];
+          parts.push({ inline_data: { mime_type: "image/png", data: b64 } });
+        }
+        const gResp = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ role: "user", parts }],
+              generationConfig: { responseModalities: ["IMAGE"] },
+            }),
+          },
+        );
+        const raw = await gResp.text();
+        if (gResp.ok) {
+          const data = JSON.parse(raw || "{}");
+          const partsOut = data?.candidates?.[0]?.content?.parts || [];
+          const imgPart = partsOut.find((p: any) => p?.inlineData?.data || p?.inline_data?.data);
+          const b64 = imgPart?.inlineData?.data || imgPart?.inline_data?.data;
+          if (b64) {
+            const dataUrl = `data:image/png;base64,${b64}`;
+            return new Response(
+              JSON.stringify({ image_data_url: dataUrl, b64_json: b64, provider: "gemini", model }),
+              { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+            );
+          }
+          errors.push("gemini: empty response");
+        } else {
+          errors.push(`gemini_${gResp.status}: ${raw.slice(0, 300)}`);
+        }
+      } catch (e) {
+        errors.push(`gemini: ${String(e)}`);
+      }
+    }
+
     return new Response(JSON.stringify({ error: errors.join(" | ") || "Sem provedor de imagem disponível" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
