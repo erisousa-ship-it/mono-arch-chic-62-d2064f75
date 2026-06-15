@@ -38,6 +38,16 @@ const state = {
   startingAt: 0,
   lastError: null,
   lastAiError: null,
+  lastIncomingAt: null,
+  lastIncomingFrom: null,
+  lastIncomingTextPreview: null,
+  incomingCount: 0,
+  lastIgnoredAt: null,
+  lastIgnoredReason: null,
+  ignoredCount: 0,
+  lastReplyTarget: null,
+  lastReplyTextPreview: null,
+  lastSendError: null,
   lastAutoReplyAt: null,
   autoReplyCount: 0,
   qrAttempts: 0,
@@ -55,6 +65,12 @@ const connectionState = () => {
   if (state.qrDataUrl) return "qr";
   if (state.lastError) return "offline";
   return "connecting";
+};
+
+const markIgnoredMessage = (reason) => {
+  state.lastIgnoredAt = Date.now();
+  state.lastIgnoredReason = reason;
+  state.ignoredCount += 1;
 };
 
 const stopSock = (reason = "restart") => {
@@ -175,22 +191,36 @@ async function generateAiReply(jid, text) {
 async function handleIncomingMessage(msg) {
   const jid = msg.key?.remoteJid;
   const id = msg.key?.id;
-  if (!state.config.bot_enabled || msg.key?.fromMe || !jid || !id || !msg.message || !isReplyableJid(jid)) return;
-  if (processedMessages.has(id)) return;
+  if (!state.config.bot_enabled) return markIgnoredMessage("bot_disabled");
+  if (msg.key?.fromMe) return markIgnoredMessage("from_me_ignored");
+  if (!jid) return markIgnoredMessage("missing_jid");
+  if (!id) return markIgnoredMessage("missing_message_id");
+  if (!msg.message) return markIgnoredMessage("missing_message_body");
+  if (!isReplyableJid(jid)) return markIgnoredMessage(`unsupported_jid:${jid}`);
+  if (processedMessages.has(id)) return markIgnoredMessage("duplicate_message");
   processedMessages.add(id);
   if (processedMessages.size > 500) processedMessages.clear();
 
   const text = extractTextMessage(msg.message);
-  if (!text) return;
+  if (!text) return markIgnoredMessage("empty_or_unsupported_message_type");
+
+  state.lastIncomingAt = Date.now();
+  state.lastIncomingFrom = jid;
+  state.lastIncomingTextPreview = text.slice(0, 160);
+  state.incomingCount += 1;
 
   try {
     await state.sock?.sendPresenceUpdate?.("composing", jid);
     const reply = await generateAiReply(jid, text);
     await state.sock?.sendMessage(jid, { text: reply }, { quoted: msg });
+    state.lastReplyTarget = jid;
+    state.lastReplyTextPreview = reply.slice(0, 160);
+    state.lastSendError = null;
     state.lastAutoReplyAt = Date.now();
     state.autoReplyCount += 1;
   } catch (e) {
     state.lastAiError = e.message;
+    state.lastSendError = e.message;
     console.error("auto reply failed", e);
     try {
       await state.sock?.sendMessage(jid, { text: "Tive uma instabilidade momentânea no atendimento. Pode me enviar sua mensagem novamente, por favor?" }, { quoted: msg });
