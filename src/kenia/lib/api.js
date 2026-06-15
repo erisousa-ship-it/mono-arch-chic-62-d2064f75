@@ -146,17 +146,20 @@ Use como referência de abordagem ferramentas jurídicas brasileiras como JusAI,
 
 ---
 
-# DRA. KÊNIA GARCIA — REFERÊNCIA DO ATENDIMENTO
-
-Use sempre como base: justiça com fé, acolhimento e propósito; mais de 15 anos de experiência; atuação em Família e Sucessões, Previdenciário e Bancário; atendimento humanizado em todo o Brasil, online e presencial; pilares de atuação técnica, empatia, segurança jurídica, transparência, acompanhamento próximo e agilidade.
-
-Em respostas curtas, faça referência ao problema do cliente, à solução que a Dra. Kênia pode conduzir e ao benefício prático do trabalho dela (segurança, estratégia, acolhimento, defesa de direitos), sem texto longo.
-
 # AGENDAMENTOS
 
-Antes de sugerir ou confirmar qualquer data, use obrigatoriamente a AGENDA REAL enviada no contexto da conversa e o CONTEXTO TEMPORAL INTERNO (fuso America/Sao_Paulo). Nunca invente horários, nunca use datas de exemplo como se fossem reais e nunca ofereça automaticamente a data de hoje; só use hoje quando estiver livre na agenda e o horário ainda for futuro.
+Antes de sugerir ou confirmar qualquer data, use obrigatoriamente o CONTEXTO TEMPORAL INTERNO enviado junto da conversa (fuso America/Sao_Paulo). Nunca use datas de exemplo como se fossem reais. Não ofereça automaticamente a data de hoje; só use hoje quando o cliente pedir explicitamente e o horário ainda for futuro.
 
-Quando o cliente quiser marcar consulta, audiência, reunião, prazo ou retorno: primeiro ofereça 2 ou 3 horários concretos tirados da AGENDA REAL. Depois que ele escolher um horário, colete apenas o que faltar, uma pergunta por vez: nome completo, telefone, e-mail, cidade/estado, breve resumo do caso e modalidade (online/presencial).
+Quando o cliente quiser marcar consulta, audiência, reunião, prazo ou retorno, pergunte de forma natural, exatamente nesta ordem antes de confirmar:
+1. Dia da semana desejado (ex: segunda, terça...)
+2. Data desejada (dd/mm/aaaa)
+3. Horário desejado (HH:MM)
+4. Nome completo
+5. Telefone
+6. E-mail
+7. Cidade/estado
+8. Breve resumo do caso (se ainda não souber pelo histórico)
+9. Modalidade (online/presencial)
 
 NUNCA pergunte a "área jurídica" no agendamento — preencha o campo "area_juridica" do JSON internamente, inferindo pelos fatos já relatados (use "a definir" se realmente não houver informação suficiente).
 
@@ -457,36 +460,9 @@ Resposta final em português do Brasil:`;
 
 const cleanInternalChatMarkers = (text) =>
   String(text || "")
-    .replace(/<AGENDAMENTO>[\s\S]*?<\/AGENDAMENTO>/gi, "")
     .replace(/<?\/?\s*HANDOFF[_\s-]*K[EÊ]NIA\s*\/?>?/giu, "")
     .replace(/`{1,3}\s*HANDOFF[_\s-]*K[EÊ]NIA\s*`{1,3}/giu, "")
     .trim();
-
-const parseAgendamentoBlock = (text = "") => {
-  const match = String(text || "").match(/<AGENDAMENTO>\s*([\s\S]*?)\s*<\/AGENDAMENTO>/i);
-  if (!match) return null;
-  try {
-    const parsed = JSON.parse(match[1].trim());
-    if (!parsed?.data_agendamento || !parsed?.horario_agendamento) return null;
-    return parsed;
-  } catch {
-    return null;
-  }
-};
-
-const agendamentoToAppointmentBody = (payload = {}) => ({
-  client_name: payload.nome || "Cliente do chat",
-  phone: payload.telefone || null,
-  email: payload.email || null,
-  area: payload.area_juridica || "Atendimento jurídico",
-  legal_area: payload.area_juridica || "Atendimento jurídico",
-  notes: [payload.resumo_caso, payload.cidade ? `Cidade: ${payload.cidade}` : ""].filter(Boolean).join(" · "),
-  starts_at: new Date(`${payload.data_agendamento}T${String(payload.horario_agendamento).slice(0, 5)}:00`).toISOString(),
-  duration_min: 60,
-  location: "Google Meet",
-  status: "confirmado",
-  source: "chatia",
-});
 
 const sanitizeOllamaReply = (reply, userMessage = "") => {
   const text = sanitizeAssistantReply(reply, userMessage)
@@ -1179,18 +1155,12 @@ const staticPost = (url, body = {}) => {
               history: body.history || [],
               session_id: sessionId,
               user_id: body.user_id || null,
-              schedule_context: body.schedule_context || "",
               want_audio: body.want_audio === true,
               return_analysis: body.return_analysis === true,
             },
           });
           if (error) throw error;
-          const rawCloudReply = data?.response || "";
-          const cloudAgendamento = parseAgendamentoBlock(rawCloudReply);
-          const createdAppointment = cloudAgendamento
-            ? (await staticPost("/appointments", agendamentoToAppointmentBody(cloudAgendamento))).data
-            : null;
-          const cloudReply = sanitizeAssistantReply(rawCloudReply, userText);
+          const cloudReply = sanitizeAssistantReply(data?.response || "", userText);
           if (cloudReply) {
             const responseText = isHistoryDumpReply(cloudReply) || isNearDuplicateReply(cloudReply, body.history || [])
               ? buildNonRepeatingFallback(userText)
@@ -1199,7 +1169,7 @@ const staticPost = (url, body = {}) => {
               session_id: data?.session_id || sessionId,
               response: responseText,
               audio_base64: data?.audio_base64 || null,
-              appointment: data?.appointment || createdAppointment || null,
+              appointment: data?.appointment || null,
               handoff: data?.handoff || false,
               speaker: data?.speaker || null,
               analysis: normalizeCaseAnalysis(data?.analysis, userText, body.history || []),
@@ -1245,7 +1215,7 @@ const staticPost = (url, body = {}) => {
             server_time: new Date().toISOString(),
           });
         }
-        const prompt = `${system}\n\nCONTEXTO TEMPORAL INTERNO: ${buildTemporalAnswer()} Use somente se o cliente pedir data ou hora.\n\n${body.schedule_context || ""}\n\n${history}\nCliente: ${userText}\nAssistente:`;
+        const prompt = `${system}\n\nCONTEXTO TEMPORAL INTERNO: ${buildTemporalAnswer()} Use somente se o cliente pedir data ou hora.\n\n${history}\nCliente: ${userText}\nAssistente:`;
 
         const tryModel = async (modelName) => {
           const controller = new AbortController();
