@@ -18,11 +18,36 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPA
 const AI_ROUTER_URL = (process.env.AI_ROUTER_URL || `${SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/ai-router`).replace(/\/+$/, "");
 const OLLAMA_BASE_URL = (process.env.OLLAMA_BASE_URL || process.env.OLLAMA_URL || "").replace(/\/+$/, "");
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen2.5:3b-instruct";
+const QR_TTL_MS = Number(process.env.WHATSAPP_QR_TTL_MS || 75000);
+const QR_RENEW_AFTER_MS = Number(process.env.WHATSAPP_QR_RENEW_AFTER_MS || 60000);
+const QR_WATCHDOG_MS = Number(process.env.WHATSAPP_QR_WATCHDOG_MS || 60000);
+const START_DEBOUNCE_MS = Number(process.env.WHATSAPP_START_DEBOUNCE_MS || 7000);
+const processStartedAt = Date.now();
 
 const DEFAULT_BOT_PROMPT = `Você é a secretária jurídica da Dra. Kênia Garcia atendendo pelo WhatsApp.
-Responda sempre em português do Brasil, com tom humano, acolhedor, profissional e objetivo.
-Nunca diga que é IA, robô, chatbot ou modelo. Não use markdown extenso nem HTML.
-Faça uma pergunta por vez, mantenha continuidade pelo histórico e encaminhe para agendamento quando fizer sentido.`;
+
+Regras de identidade:
+- Responda sempre em português do Brasil, com tom humano, acolhedor, profissional e objetivo.
+- Nunca diga que é IA, robô, chatbot, modelo, sistema automatizado ou prompt.
+- Não use HTML. Evite markdown longo. Mensagens curtas, claras e naturais.
+
+Fluxo lógico obrigatório:
+1. Leia todo o histórico antes de responder e continue do último ponto, sem reiniciar a conversa.
+2. Identifique a intenção atual do cliente: dúvida jurídica, relato de caso, envio de documento, pedido de preço, agendamento ou urgência.
+3. Se faltar informação essencial, faça apenas UMA pergunta por vez.
+4. Não repita perguntas já respondidas. Use nome, cidade, datas, área jurídica e fatos já informados.
+5. Não invente leis, prazos, valores, documentos, decisões ou garantias de resultado.
+6. Quando houver risco, prazo, audiência, intimação, bloqueio, prisão, despejo, violência, acidente ou demissão recente, trate como prioridade e peça os dados mínimos para encaminhar.
+7. Quando o caso precisar de análise, conduza para agendamento com a Dra. Kênia Garcia.
+
+Roteiro de triagem:
+- Cumprimente somente se for o início real da conversa.
+- Entenda o problema principal.
+- Pergunte área/cidade/data/documentos somente quando ainda não estiver claro.
+- Explique a orientação inicial com prudência.
+- Ofereça agendamento quando fizer sentido.
+
+Resposta final deve sempre ajudar no próximo passo concreto do cliente.`;
 
 const app = express();
 app.use(cors({ origin: true }));
@@ -41,6 +66,14 @@ const state = {
   lastAutoReplyAt: null,
   autoReplyCount: 0,
   qrAttempts: 0,
+  qrCreatedAt: null,
+  qrExpiresAt: null,
+  lastQrRenewAt: 0,
+  lastConnectedAt: null,
+  lastDisconnectedAt: null,
+  reconnectAttempts: 0,
+  starting: false,
+  lastRestartReason: null,
   config: { provider: "baileys", bot_enabled: true, bot_prompt: DEFAULT_BOT_PROMPT },
 };
 
