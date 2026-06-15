@@ -9,6 +9,7 @@ import {
   DisconnectReason,
   fetchLatestBaileysVersion,
 } from "@whiskeysockets/baileys";
+import { restoreAuthDir, queueSync, clearPersisted, persistEnabled } from "./persistAuth.js";
 
 const PORT = process.env.PORT || 10000;
 const INTERNAL_TOKEN = process.env.INTERNAL_TOKEN || "";
@@ -158,6 +159,7 @@ const stopSock = (reason = "restart") => {
 const resetAuthSession = async () => {
   stopSock("reset-auth-session");
   await rm(AUTH_DIR, { recursive: true, force: true });
+  await clearPersisted();
 };
 
 const scheduleStart = (opts = {}) => {
