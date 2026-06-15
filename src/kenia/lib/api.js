@@ -865,8 +865,8 @@ const staticGet = async (url, config = {}) => {
   if (path === "/whatsapp/config") return response(withCurrentBotPrompt(read("whatsapp_config", defaultWhatsAppConfig)));
   if (path === "/crm/stages") return response(stages);
   if (path === "/leads") return response(read("leads", seedLeads));
-  if (path === "/whatsapp/contacts") return response(read("contacts", seedContacts));
-  if (path.startsWith("/whatsapp/messages/")) return response(read("messages", seedMessages)[path.split("/").pop()] || []);
+  if (path === "/whatsapp/contacts") return response(sanitizeWhatsAppTextPayload(read("contacts", seedContacts)));
+  if (path.startsWith("/whatsapp/messages/")) return response(sanitizeWhatsAppTextPayload(read("messages", seedMessages)[path.split("/").pop()] || []));
   if (path === "/dashboard/metrics") return response(getMetrics());
   if (path === "/legal-deadlines") return response(read("legal_deadlines", seedLegalDeadlines));
   if (path === "/processes") return response(read("processes", seedProcesses));
@@ -1433,6 +1433,9 @@ export const api = HAS_BACKEND
           if (path === "/whatsapp/config") {
             return { ...res, data: withCurrentBotPrompt(res?.data || {}) };
           }
+          if (path === "/whatsapp/contacts" || path === "/whatsapp/logs" || path.startsWith("/whatsapp/messages/")) {
+            return { ...res, data: sanitizeWhatsAppTextPayload(res?.data) };
+          }
           return res;
         } catch (err) {
           if (backendSafeGetPaths.has(path)) return staticGet(url, config);
@@ -1464,6 +1467,9 @@ export const api = HAS_BACKEND
           try {
             const res = await liveRequest("get", url, config);
             if (path === "/whatsapp/config") return { ...res, data: withCurrentBotPrompt(res?.data || {}) };
+            if (path === "/whatsapp/contacts" || path === "/whatsapp/logs" || path.startsWith("/whatsapp/messages/")) {
+              return { ...res, data: sanitizeWhatsAppTextPayload(res?.data) };
+            }
             return res;
           } catch {
             return staticGet(url, config);
