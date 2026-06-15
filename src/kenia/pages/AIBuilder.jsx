@@ -28,6 +28,7 @@ const PROGRESS_EVENTS = {
 };
 
 const PROVIDERS_FALLBACK = [
+  { id: "lovable", label: "Lovable AI (chave nativa · recomendado)", default_model: "google/gemini-3-flash-preview", models: ["google/gemini-3-flash-preview", "google/gemini-2.5-pro", "openai/gpt-5", "openai/gpt-5-mini"] },
   { id: "emergent", label: "Emergent (universal · fallback Lovable AI)", default_model: "emergent-default", models: ["emergent-default", "google/gemini-3-flash-preview"] },
   { id: "anthropic", label: "Anthropic Claude Sonnet 4.6 (recomendado p/ código)", default_model: "claude-sonnet-4-6", models: ["claude-sonnet-4-6", "claude-opus-4-8", "claude-opus-4-7", "claude-haiku-4-5-20251001"] },
   { id: "openai", label: "OpenAI GPT-5.4", default_model: "gpt-5.4", models: ["gpt-5.4", "gpt-5.4-mini", "gpt-5.2", "gpt-4o"] },
@@ -53,8 +54,8 @@ export default function AIBuilder() {
   const [generatedPlan, setGeneratedPlan] = useState(null);
   const [expandedFiles, setExpandedFiles] = useState({});
   const [providers, setProviders] = useState(PROVIDERS_FALLBACK);
-  const [provider, setProvider] = useState("emergent");
-  const [model, setModel] = useState("emergent-default");
+  const [provider, setProvider] = useState("lovable");
+  const [model, setModel] = useState("google/gemini-3-flash-preview");
   const [keys, setKeys] = useState(loadKeys());
   const [keyDialogOpen, setKeyDialogOpen] = useState(false);
   const [keyDraft, setKeyDraft] = useState({ emergent: "", anthropic: "", openai: "", gemini: "" });
@@ -86,7 +87,8 @@ export default function AIBuilder() {
 
   const currentProviderObj = providers.find((p) => p.id === provider) || PROVIDERS_FALLBACK[0];
   const currentKey = (keys[provider] || "").trim();
-  const usingEmergentKey = !currentKey;
+  const usingLovableNative = provider === "lovable";
+  const usingEmergentKey = !usingLovableNative && !currentKey;
 
   const handleSubmit = async (e) => {
     e?.preventDefault();
@@ -222,7 +224,7 @@ export default function AIBuilder() {
         <div className="flex items-center gap-2">
           <Badge variant="outline" className="gap-1.5">
             <KeyRound className="w-3.5 h-3.5" />
-            {usingEmergentKey ? "Chave Emergent (universal)" : `Chave própria · ${provider}`}
+            {usingLovableNative ? "Chave Lovable (nativa)" : usingEmergentKey ? "Chave Emergent (universal)" : `Chave própria · ${provider}`}
           </Badge>
           <Button variant="outline" size="sm" onClick={openKeyDialog} data-testid="ai-builder-manage-keys">
             <Key className="w-4 h-4 mr-1.5" /> Gerenciar chaves
