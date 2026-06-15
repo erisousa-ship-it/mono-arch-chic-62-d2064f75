@@ -1364,6 +1364,8 @@ const backendSafeGetPaths = new Set([
   "/whatsapp/baileys/qr",
   "/whatsapp/qr",
   "/whatsapp/qr/image",
+  "/whatsapp/logs",
+  "/whatsapp/bot-delivery-stats",
 ]);
 
 export const api = HAS_BACKEND
