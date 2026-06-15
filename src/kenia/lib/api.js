@@ -1474,7 +1474,7 @@ export const api = HAS_BACKEND
         if (path.startsWith("/legal-deadlines/")) return staticPost(url, body);
         if (cloudFirstPostPaths.has(path)) return staticPost(url, body);
         if (path === "/chat/message") return staticPost(url, body);
-        if (path === "/whatsapp/send") return liveRequest("post", url, body, config).then((res) => ({ ...res, data: sanitizeWhatsAppTextPayload(res?.data) })).catch(() => staticPost(url, body));
+        if (path === "/whatsapp/send") return liveRequest("post", url, sanitizeTextBody(body), config).then((res) => ({ ...res, data: sanitizeWhatsAppTextPayload(res?.data) })).catch(() => staticPost(url, body));
         if (liveFirstWithStaticFallbackPostPaths.has(path)) {
           return liveRequest("post", url, body, config).catch(() => staticPost(url, body));
         }
@@ -1507,7 +1507,7 @@ export const api = HAS_BACKEND
       post: (url, body, config) => {
         const [path] = String(url).split("?");
         if (hasBackend() && (path.startsWith("/whatsapp/") || fallbackToStaticPostPaths.has(path))) {
-          return liveRequest("post", url, body, config).then((res) => ({ ...res, data: sanitizeWhatsAppTextPayload(res?.data) })).catch(() => staticPost(url, body));
+          return liveRequest("post", url, path === "/whatsapp/send" ? sanitizeTextBody(body) : body, config).then((res) => ({ ...res, data: sanitizeWhatsAppTextPayload(res?.data) })).catch(() => staticPost(url, body));
         }
         return staticPost(url, body);
       },
