@@ -854,6 +854,25 @@ export default function ChatIA() {
       if (data.appointment) {
         toast.success("Consulta salva automaticamente na Agenda");
       }
+      // Fallback: parse <AGENDAMENTO> block returned in response text
+      const agBlock = parseAgendamentoBlock(data.response);
+      if (agBlock && !data.appointment) {
+        try {
+          const result = await createAppointment({
+            date: agBlock.data_agendamento,
+            time: agBlock.horario_agendamento,
+            duration: 60,
+            area: agBlock.area_juridica || analysis?.area || "Atendimento jurídico",
+          });
+          toast.success("Consulta salva automaticamente na Agenda");
+          upsertLead({ stage: "em_negociacao", urgency: "alta", description: agBlock.resumo_caso });
+          // Substitui a resposta da IA pela confirmação rica com link Meet
+          data = { ...data, response: buildAppointmentMessage(result) };
+        } catch (err) {
+          console.error("Erro ao registrar agendamento do bloco <AGENDAMENTO>:", err);
+          toast.error("Não consegui salvar o agendamento na Agenda");
+        }
+      }
       if (data.analysis) setAnalysis(data.analysis);
       upsertLead({ description: msg });
       setThinking(false);
