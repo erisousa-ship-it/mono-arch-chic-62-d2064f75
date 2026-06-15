@@ -236,7 +236,7 @@ export default function Dashboard() {
   };
 
   const applyAIReply = (text) => {
-    setDraft(text);
+    setDraft(enforceSecretarySecondPerson(text));
     toast.success("Resposta copiada para o WhatsApp");
   };
 
