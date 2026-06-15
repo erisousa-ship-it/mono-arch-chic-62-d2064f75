@@ -496,7 +496,7 @@ async function generateAiReply(jid, text) {
     return null;
   });
   if (emergentReply) {
-    const safeReply = enforceSecretarySecondPerson(emergentReply);
+    const safeReply = sanitizeOutbound(emergentReply);
     rememberMessage(jid, "assistant", safeReply);
     state.lastAiError = null;
     return safeReply;
@@ -507,7 +507,7 @@ async function generateAiReply(jid, text) {
     return null;
   });
   if (directReply) {
-    const safeReply = enforceSecretarySecondPerson(directReply);
+    const safeReply = sanitizeOutbound(directReply);
     rememberMessage(jid, "assistant", safeReply);
     state.lastAiError = null;
     return safeReply;
@@ -528,7 +528,7 @@ async function generateAiReply(jid, text) {
     const raw = await r.text();
     if (!r.ok) throw new Error(`ai-router_${r.status}: ${raw.slice(0, 300)}`);
     const data = JSON.parse(raw || "{}");
-    const reply = enforceSecretarySecondPerson(String(data.text || data.response || "").trim());
+    const reply = sanitizeOutbound(String(data.text || data.response || "").trim());
     if (!reply) throw new Error("ai-router_empty_response");
     rememberMessage(jid, "assistant", reply);
     state.lastAiError = null;
