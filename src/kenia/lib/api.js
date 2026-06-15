@@ -447,7 +447,20 @@ export const enforceSecretarySecondPerson = (reply) => {
   if (startsWithClientFirstPersonNeed(text)) {
     return "Você está precisando de alguma informação jurídica, certo";
   }
-  return text.replace(/\b(?:eu\s+)?(?:estou\s+)?precisando\s+de\s+(?:alguma\s+)?informa[cç][aã]o\s+jur[ií]dica\b/giu, "Você está precisando de alguma informação jurídica, certo");
+  return text
+    .replace(/\b(?:eu\s+)?(?:estou|t[oô]|tou)\s+precisando\s+de\s+(?:alguma\s+)?informa[cç][aã]o\s+jur[ií]dica\b/giu, "Você está precisando de alguma informação jurídica, certo")
+    .replace(/\b(?:eu\s+)?preciso\s+de\s+(?:alguma\s+)?informa[cç][aã]o\s+jur[ií]dica\b/giu, "Você está precisando de alguma informação jurídica, certo")
+    .replace(/\b(?:eu\s+)?(?:estou|t[oô]|tou)\s+precisando\s+de\s+mais\s+(?:alguma\s+)?informa[cç][oõ]es\??/giu, "Você deseja acrescentar mais alguma informação?")
+    .replace(/\b(?:eu\s+)?(?:estou|t[oô]|tou)\s+precisando\s+de\s+(?:mais\s+)?(?:alguma\s+)?informa[cç][aã]o\??/giu, "Você deseja acrescentar mais alguma informação?")
+    .replace(/\b(?:eu\s+)?preciso\s+de\s+(?:mais\s+)?informa[cç][oõ]es\.?/giu, "Você gostaria de fornecer mais alguma informação?")
+    .replace(/\b(?:eu\s+)?preciso\s+de\s+(?:mais\s+)?dados\.?/giu, "Você pode enviar mais dados para continuar?")
+    .replace(/\b(?:eu\s+)?preciso\s+que\s+(?:voc[eê]\s+)?(?:me\s+)?envie\s+mais\s+detalhes\.?/giu, "Você pode enviar mais detalhes para continuar?")
+    .replace(/\b(?:eu\s+)?(?:estou|t[oô]|tou)\s+aguardando\s+(?:a\s+)?sua\s+resposta\.?/giu, "Quando você enviar as informações, o processo continuará automaticamente.")
+    .replace(/\b(?:eu\s+)?(?:estou|t[oô]|tou)\s+aguardando\s+mais\s+informa[cç][oõ]es\.?/giu, "Você gostaria de fornecer mais alguma informação?")
+    .replace(/\b(?:a\s+)?(?:assistente|ia|i\.a\.|rob[oô]|sistema)\s+(?:precisa|aguarda|est[aá]\s+aguardando)\s+(?:de\s+)?(?:mais\s+)?(?:dados|informa[cç][oõ]es|sua\s+resposta)\.?/giu, "Quando você enviar as informações, o processo continuará automaticamente.")
+    .replace(/\b(?:como\s+)?(?:assistente|ia|i\.a\.|rob[oô]|sistema)\b\s*,?\s*/giu, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 };
 
 const sanitizeAssistantReply = (reply, userMessage = "") =>
@@ -801,12 +814,24 @@ const response = (data, status = 200, headers = {}) => Promise.resolve({ data: c
 const sanitizeWhatsAppTextPayload = (payload) => {
   if (Array.isArray(payload)) return payload.map(sanitizeWhatsAppTextPayload);
   if (!payload || typeof payload !== "object") return payload;
+  const textKeys = ["text", "last_message", "response", "content", "body", "caption"];
+  const sanitized = { ...payload };
+  for (const key of textKeys) {
+    if (typeof sanitized[key] === "string") sanitized[key] = enforceSecretarySecondPerson(sanitized[key]);
+  }
+  if (Array.isArray(sanitized.messages)) sanitized.messages = sanitizeWhatsAppTextPayload(sanitized.messages);
+  if (sanitized.message && typeof sanitized.message === "object") sanitized.message = sanitizeWhatsAppTextPayload(sanitized.message);
+  if (typeof sanitized.message === "string") sanitized.message = enforceSecretarySecondPerson(sanitized.message);
+  return sanitized;
+};
+
+const sanitizeTextBody = (body = {}) => {
+  if (!body || typeof body !== "object") return body;
   return {
-    ...payload,
-    ...(typeof payload.text === "string" ? { text: enforceSecretarySecondPerson(payload.text) } : {}),
-    ...(typeof payload.last_message === "string" ? { last_message: enforceSecretarySecondPerson(payload.last_message) } : {}),
-    ...(typeof payload.response === "string" ? { response: enforceSecretarySecondPerson(payload.response) } : {}),
-    ...(payload.message && typeof payload.message === "object" ? { message: sanitizeWhatsAppTextPayload(payload.message) } : {}),
+    ...body,
+    ...(typeof body.text === "string" ? { text: enforceSecretarySecondPerson(body.text) } : {}),
+    ...(typeof body.message === "string" ? { message: enforceSecretarySecondPerson(body.message) } : {}),
+    ...(typeof body.response === "string" ? { response: enforceSecretarySecondPerson(body.response) } : {}),
   };
 };
 const nextId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
