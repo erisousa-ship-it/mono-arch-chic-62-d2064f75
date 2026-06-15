@@ -1302,6 +1302,22 @@ const staticPost = (url, body = {}) => {
       try {
         const start = body.starts_at ? new Date(body.starts_at) : new Date();
         const { data: authData } = await supabase.auth.getUser().catch(() => ({ data: null }));
+        // 1) Tenta criar evento + Google Meet via Google Calendar
+        let meetingLink = null;
+        try {
+          const { data: meetData, error: meetErr } = await supabase.functions.invoke("create-meeting", {
+            body: {
+              title: body.title || `Consulta — ${body.area || body.legal_area || "Atendimento jurídico"} · ${body.client_name || "Cliente"}`,
+              starts_at: start.toISOString(),
+              duration_min: body.duration_min || 60,
+              description: [body.notes, body.phone ? `WhatsApp: ${body.phone}` : ""].filter(Boolean).join("\n"),
+              attendees: body.email ? [{ email: body.email, name: body.client_name }] : [],
+            },
+          });
+          if (!meetErr && meetData?.meeting_link) meetingLink = meetData.meeting_link;
+        } catch (e) {
+          console.warn("create-meeting falhou, seguindo com link fallback", e);
+        }
         const { data, error } = await supabase
           .from("appointments")
           .insert({
@@ -1315,12 +1331,13 @@ const staticPost = (url, body = {}) => {
             appointment_time: start.toTimeString().slice(0, 5),
             source: body.source || "panel",
             status: body.status === "confirmado" ? "scheduled" : body.status || "scheduled",
+            meeting_link: meetingLink,
             raw_payload: body,
           })
           .select("*")
           .single();
         if (error) throw error;
-        return response(normalizeAppointment({ ...body, ...data }), 201);
+        return response(normalizeAppointment({ ...body, ...data, meeting_link: meetingLink || data.meeting_link }), 201);
       } catch {
         return insertItem("appointments", seedAppointments, "appt", normalizeAppointment(body));
       }
