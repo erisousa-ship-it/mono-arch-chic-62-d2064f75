@@ -1049,7 +1049,7 @@ const staticPost = (url, body = {}) => {
             appointment: null,
             handoff: false,
             speaker: null,
-            analysis: { acertividade: 100, qualificacao: "ok" },
+            analysis: normalizeCaseAnalysis(null, userText, body.history || []),
             server_time: new Date().toISOString(),
           });
         }
@@ -1077,7 +1077,7 @@ const staticPost = (url, body = {}) => {
               appointment: data?.appointment || null,
               handoff: data?.handoff || false,
               speaker: data?.speaker || null,
-              analysis: data?.analysis || { acertividade: 80, qualificacao: "ok" },
+              analysis: normalizeCaseAnalysis(data?.analysis, userText, body.history || []),
               server_time: new Date().toISOString(),
             });
           }
@@ -1092,7 +1092,7 @@ const staticPost = (url, body = {}) => {
             appointment: null,
             handoff: false,
             speaker: null,
-            analysis: { acertividade: 100, qualificacao: "ok" },
+            analysis: normalizeCaseAnalysis(null, userText, body.history || []),
             server_time: new Date().toISOString(),
           });
         }
@@ -1104,7 +1104,7 @@ const staticPost = (url, body = {}) => {
             appointment: null,
             handoff: true,
             speaker: "Dra. Kênia Garcia",
-            analysis: { acertividade: 100, qualificacao: "ok" },
+            analysis: normalizeCaseAnalysis(null, userText, body.history || []),
             server_time: new Date().toISOString(),
           });
         }
@@ -1116,7 +1116,7 @@ const staticPost = (url, body = {}) => {
             appointment: null,
             handoff: false,
             speaker: null,
-            analysis: { acertividade: 90, qualificacao: "ok" },
+            analysis: normalizeCaseAnalysis(null, userText, body.history || []),
             server_time: new Date().toISOString(),
           });
         }
