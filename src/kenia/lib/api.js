@@ -571,12 +571,24 @@ const buildCaseAnalysis = (message = "", history = []) => {
   const text = String(userMessages || message || "");
   const lower = normalizePortuguese(text);
   const rules = [
-    { area: "Família", rx: /\b(divorcio|guarda|pensao|alimentos|inventario|uniao estavel|visita|partilha)\b/, fundamentos: ["Código Civil, arts. 1.571 a 1.582", "CPC, procedimentos de família", "Lei de Alimentos 5.478/68"] },
-    { area: "Trabalhista", rx: /\b(demissao|rescisao|clt|fgts|verbas|ferias|decimo|hora extra|salario|trabalho|emprego)\b/, fundamentos: ["CLT", "CF/88, art. 7º", "Prazos trabalhistas aplicáveis ao caso"] },
-    { area: "Previdenciário/INSS", rx: /\b(inss|aposentadoria|beneficio|auxilio|bpc|loas|pericia|previdenciario)\b/, fundamentos: ["Lei 8.213/91", "Decreto 3.048/99", "Regras administrativas do INSS"] },
-    { area: "Consumidor", rx: /\b(consumidor|compra|produto|servico|defeito|garantia|cobranca|negativacao|banco|cartao)\b/, fundamentos: ["Código de Defesa do Consumidor", "CDC, arts. 6º, 14, 18 e 42", "Entendimento dos Juizados Especiais quando cabível"] },
-    { area: "Cível", rx: /\b(contrato|cobranca|indenizacao|dano moral|aluguel|locacao|imovel|vizinho|divida)\b/, fundamentos: ["Código Civil", "CPC", "Lei do Inquilinato 8.245/91 quando houver locação"] },
-    { area: "Criminal", rx: /\b(boletim|ocorrencia|prisao|ameaca|agressao|crime|medida protetiva|violencia)\b/, fundamentos: ["Código Penal", "CPP", "Lei Maria da Penha quando houver violência doméstica"] },
+    { area: "Família", rx: /\b(divorcio|guarda|pensao|alimentos|inventario|uniao estavel|visita|partilha)\b/,
+      fundamentos: ["Código Civil, arts. 1.571 a 1.582", "CPC, procedimentos de família", "Lei de Alimentos 5.478/68"],
+      jurisprudencia: ["STJ — guarda compartilhada como regra (REsp 1.251.000/MG e julgados subsequentes)", "STF — divórcio direto após EC 66/2010 (sem requisito de separação prévia)", "Súmula 277/STJ — alimentos podem ser revisados a qualquer tempo"] },
+    { area: "Trabalhista", rx: /\b(demissao|rescisao|clt|fgts|verbas|ferias|decimo|hora extra|salario|trabalho|emprego)\b/,
+      fundamentos: ["CLT", "CF/88, art. 7º", "Prazo bienal/quinquenal — CF art. 7º, XXIX"],
+      jurisprudencia: ["Súmula 330/TST — quitação restrita às parcelas discriminadas", "Súmula 437/TST — intervalo intrajornada", "STF Tema 1.046 — limites da negociação coletiva"] },
+    { area: "Previdenciário/INSS", rx: /\b(inss|aposentadoria|beneficio|auxilio|bpc|loas|pericia|previdenciario)\b/,
+      fundamentos: ["Lei 8.213/91", "Decreto 3.048/99", "EC 103/2019 (Reforma da Previdência)"],
+      jurisprudencia: ["STJ Tema 1.124 — revisão da vida toda (observar modulação do STF)", "STF Tema 1.102 — desaposentação não cabível", "Súmula 111/STJ — honorários sobre prestações vencidas"] },
+    { area: "Consumidor", rx: /\b(consumidor|compra|produto|servico|defeito|garantia|cobranca|negativacao|banco|cartao)\b/,
+      fundamentos: ["CDC, arts. 6º, 14, 18 e 42", "Lei 14.181/2021 (superendividamento)"],
+      jurisprudencia: ["Súmula 297/STJ — CDC aplicável às instituições financeiras", "Súmula 385/STJ — dano moral por negativação preexistente", "STJ Tema 929 — danos morais em vícios de produto"] },
+    { area: "Cível", rx: /\b(contrato|cobranca|indenizacao|dano moral|aluguel|locacao|imovel|vizinho|divida)\b/,
+      fundamentos: ["Código Civil", "CPC", "Lei do Inquilinato 8.245/91 quando houver locação"],
+      jurisprudencia: ["Súmula 410/STJ — necessidade de prévia interpelação em obrigações de fazer", "STJ Tema 622 — juros moratórios em responsabilidade contratual"] },
+    { area: "Criminal", rx: /\b(boletim|ocorrencia|prisao|ameaca|agressao|crime|medida protetiva|violencia)\b/,
+      fundamentos: ["Código Penal", "CPP", "Lei Maria da Penha 11.340/06 art. 18 (medidas protetivas)"],
+      jurisprudencia: ["Súmula 588/STJ — ANPP não se aplica à violência doméstica contra a mulher", "STF ADC 19 e ADI 4.424 — constitucionalidade da Lei Maria da Penha; ação penal pública incondicionada em lesão dolosa"] },
   ];
   const match = rules.find((rule) => rule.rx.test(lower));
   const hasLegalSignal = Boolean(match) || /\b(processo|audiencia|intimacao|prazo|documento|advogada|juridic|direito|lei|acao)\b/.test(lower);
@@ -607,6 +619,7 @@ const buildCaseAnalysis = (message = "", history = []) => {
       : "A análise foi iniciada, mas precisa de fatos, datas e documentos para aumentar a precisão.",
     proxima_pergunta,
     fundamentos: match?.fundamentos || ["Triagem jurídica preliminar", "Análise documental", "Confirmação de fatos, datas e prazos"],
+    jurisprudencia: match?.jurisprudencia || ["Aguardando detalhes para indicar precedentes do STF/STJ aplicáveis."],
   };
 };
 
@@ -626,6 +639,7 @@ const normalizeCaseAnalysis = (raw, message = "", history = []) => {
     motivo: raw.motivo || fallback.motivo,
     proxima_pergunta: raw.proxima_pergunta || fallback.proxima_pergunta,
     fundamentos: Array.isArray(raw.fundamentos) && raw.fundamentos.length ? raw.fundamentos : fallback.fundamentos,
+    jurisprudencia: Array.isArray(raw.jurisprudencia) && raw.jurisprudencia.length ? raw.jurisprudencia : fallback.jurisprudencia,
   };
 };
 
