@@ -580,7 +580,12 @@ app.post("/api/settings/test-image", auth, async (_req, res) => {
     const img = await callEmergentImage({ prompt: "ícone jurídico abstrato elegante", style: "teste técnico simples" });
     res.json({ ok: true, provider: "emergent", model: EMERGENT_IMAGE_MODEL, using_custom_key: !!state.settings.llm_image_key, has_image: !!(img.image_base64 || img.image_url) });
   } catch (e) {
-    res.status(500).json({ ok: false, provider: "emergent", model: EMERGENT_IMAGE_MODEL, error: e.message });
+    try {
+      const fallback = await callLovableImage({ prompt: "ícone jurídico abstrato elegante", style: "teste técnico simples" });
+      res.json({ ok: true, provider: "lovable", model: "openai/gpt-image-2", using_custom_key: !!state.settings.llm_image_key, has_image: !!(fallback.image_base64 || fallback.image_url), warning: e.message });
+    } catch (fallbackError) {
+      res.status(500).json({ ok: false, provider: "emergent", model: EMERGENT_IMAGE_MODEL, error: `${e.message} | fallback_lovable: ${fallbackError.message}` });
+    }
   }
 });
 
@@ -589,7 +594,12 @@ app.post("/api/generate-image", auth, async (req, res) => {
     const result = await callEmergentImage(req.body || {});
     res.json({ ok: true, provider: "emergent", model: EMERGENT_IMAGE_MODEL, ...result });
   } catch (e) {
-    res.status(500).json({ ok: false, provider: "emergent", model: EMERGENT_IMAGE_MODEL, error: e.message });
+    try {
+      const result = await callLovableImage(req.body || {});
+      res.json({ ok: true, provider: "lovable", model: "openai/gpt-image-2", warning: e.message, ...result });
+    } catch (fallbackError) {
+      res.status(500).json({ ok: false, provider: "emergent", model: EMERGENT_IMAGE_MODEL, error: `${e.message} | fallback_lovable: ${fallbackError.message}` });
+    }
   }
 });
 
