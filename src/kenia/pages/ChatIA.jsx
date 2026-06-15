@@ -835,7 +835,7 @@ export default function ChatIA() {
       return;
     }
     try {
-      const { data } = await api.post(
+      let { data } = await api.post(
         "/chat/message",
         {
           message: msg,
