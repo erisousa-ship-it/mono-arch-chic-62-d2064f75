@@ -1137,9 +1137,9 @@ const staticPost = (url, body = {}) => {
       const styleHint = `${body.network || "instagram"} ${body.format || "post"}${body.case_type ? ` — área ${body.case_type}` : ""}${body.tone ? `, tom ${body.tone}` : ""}`;
       let b64 = "";
       let genError = null;
-      // 1) Tenta o endpoint FastAPI nativo (Emergent LLM Key + Gemini Nano Banana)
+      // 1) Tenta o backend configurado (Render) usando Lovable AI como gerador principal.
       try {
-        const res = await liveApi.post("/generate-image", {
+        const res = await liveRequest("post", "/generate-image", {
           prompt: topic,
           style: styleHint,
           reference_image_base64: body.reference_image_base64 || null,
