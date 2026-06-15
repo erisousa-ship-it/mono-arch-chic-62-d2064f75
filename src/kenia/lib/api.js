@@ -460,9 +460,36 @@ Resposta final em português do Brasil:`;
 
 const cleanInternalChatMarkers = (text) =>
   String(text || "")
+    .replace(/<AGENDAMENTO>[\s\S]*?<\/AGENDAMENTO>/gi, "")
     .replace(/<?\/?\s*HANDOFF[_\s-]*K[EÊ]NIA\s*\/?>?/giu, "")
     .replace(/`{1,3}\s*HANDOFF[_\s-]*K[EÊ]NIA\s*`{1,3}/giu, "")
     .trim();
+
+const parseAgendamentoBlock = (text = "") => {
+  const match = String(text || "").match(/<AGENDAMENTO>\s*([\s\S]*?)\s*<\/AGENDAMENTO>/i);
+  if (!match) return null;
+  try {
+    const parsed = JSON.parse(match[1].trim());
+    if (!parsed?.data_agendamento || !parsed?.horario_agendamento) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
+const agendamentoToAppointmentBody = (payload = {}) => ({
+  client_name: payload.nome || "Cliente do chat",
+  phone: payload.telefone || null,
+  email: payload.email || null,
+  area: payload.area_juridica || "Atendimento jurídico",
+  legal_area: payload.area_juridica || "Atendimento jurídico",
+  notes: [payload.resumo_caso, payload.cidade ? `Cidade: ${payload.cidade}` : ""].filter(Boolean).join(" · "),
+  starts_at: new Date(`${payload.data_agendamento}T${String(payload.horario_agendamento).slice(0, 5)}:00`).toISOString(),
+  duration_min: 60,
+  location: "Google Meet",
+  status: "confirmado",
+  source: "chatia",
+});
 
 const sanitizeOllamaReply = (reply, userMessage = "") => {
   const text = sanitizeAssistantReply(reply, userMessage)
