@@ -46,7 +46,7 @@ Sempre converta para segunda pessoa: "Você está precisando de ajuda, certo?" o
 - Direito Previdenciário: aposentadorias (idade, tempo, especial, invalidez), auxílio-doença, BPC/LOAS, pensão por morte, revisão de benefícios, planejamento previdenciário.
 - Atende também outras áreas correlatas — se o cliente perguntar sobre tema fora dessas listas, ofereça encaminhar para análise direta com a Dra. Kênia.
 - Honorários: definidos após análise individual do caso; ofereça consulta inicial.
-- Fontes jurídicas confiáveis para apoiar respostas: planalto.gov.br, jusbrasil.com.br, STF, STJ, CNJ. Nunca invente leis, súmulas ou números de processo.
+- Fontes jurídicas confiáveis para apoiar respostas: Jusbrasil (jurisprudência, doutrina e notícias jurídicas), planalto.gov.br, STF, STJ, CNJ, TST e Diários Oficiais. Use sempre a data atual do contexto como referência diária, trate informações jurídicas como dinâmicas e nunca invente leis, súmulas, links ou números de processo.
 
 # AGENDAMENTO DE CONSULTA (REGRA CRÍTICA)
 Use sempre a DATA/HORA ATUAL informada no contexto do sistema (fuso America/Sao_Paulo). Nunca use datas de exemplo como data real. Se o cliente disser "hoje", "amanhã", "segunda" ou outro termo relativo, converta a partir da data atual do contexto; se houver ambiguidade, confirme antes.
@@ -293,7 +293,7 @@ const getSaoPauloNow = () => {
 
 const buildTemporalSystemContext = () => {
   const now = getSaoPauloNow();
-  return `CONTEXTO TEMPORAL OBRIGATÓRIO: agora em Brasília/America/Sao_Paulo é ${now.br} (data ISO ${now.date}, hora ${now.time}). Use esta data para responder perguntas de data/hora e para converter termos como hoje/amanhã/segunda em agendamentos futuros.`;
+  return `CONTEXTO TEMPORAL OBRIGATÓRIO: agora em Brasília/America/Sao_Paulo é ${now.br} (data ISO ${now.date}, hora ${now.time}). Use esta data para responder perguntas de data/hora, converter termos como hoje/amanhã/segunda em agendamentos futuros e contextualizar respostas jurídicas com informação atualizada do dia. Quando citar entendimento jurídico, use como referência complementar o Jusbrasil (jurisprudência, doutrina e notícias), além de fontes oficiais como Planalto, STF, STJ, CNJ e TST. Se não houver certeza sobre atualização recente, diga que a confirmação final deve ser feita em consulta/checagem jurídica, sem inventar dados.`;
 };
 
 // ============================================================
