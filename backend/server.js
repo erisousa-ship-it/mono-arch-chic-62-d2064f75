@@ -184,9 +184,14 @@ async function generateDirectOllamaReply(messages) {
 
 async function generateAiReply(jid, text) {
   const history = rememberMessage(jid, "user", text);
+  const recentHistory = history.slice(-10);
   const messages = [
     { role: "system", content: state.config.bot_prompt || DEFAULT_BOT_PROMPT },
-    ...history,
+    {
+      role: "system",
+      content: "Antes de responder, confira se a pergunta já foi respondida no histórico. Responda só ao próximo passo lógico. Não faça mais de uma pergunta na mesma mensagem. Se o cliente perguntou algo direto, responda primeiro e depois avance a triagem.",
+    },
+    ...recentHistory,
   ];
 
   const directReply = await generateDirectOllamaReply(messages).catch((e) => {
