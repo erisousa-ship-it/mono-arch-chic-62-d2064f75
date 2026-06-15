@@ -1153,14 +1153,15 @@ const staticPost = (url, body = {}) => {
   if (path === "/chat/message") {
     return (async () => {
       const sessionId = body.session_id || nextId("session");
-      const fallbackReply =
-        "Tive uma instabilidade momentânea. Estou aqui para te ajudar; pode me contar o que aconteceu em uma frase curta?";
+      const userText = body.message || body.text || "";
+      const fallbackReply = isGeneralSupportTopic(userText)
+        ? buildGeneralTopicReply(userText)
+        : "Tive uma instabilidade momentânea. Estou aqui para te ajudar; pode me contar o que aconteceu em uma frase curta?";
       try {
         const history = (body.history || [])
           .map((m) => `${m.role === "user" ? "Cliente" : "Assistente"}: ${m.content}`)
           .join("\n");
         const system = DEFAULT_PROMPT;
-        const userText = body.message || body.text || "";
         if (userAskedTemporalInfo(userText)) {
           return response({
             session_id: sessionId,
