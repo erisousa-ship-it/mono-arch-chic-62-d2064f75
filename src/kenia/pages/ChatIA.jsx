@@ -764,7 +764,11 @@ export default function ChatIA() {
       await typeAssistantMessage(buildAppointmentMessage(result));
     } catch (err) {
       console.error("Erro ao criar agendamento:", err);
-      toast.error("Não consegui agendar. Tente novamente.");
+      const slots = err?.availableSlots?.length ? err.availableSlots : await getAgendaSlots(4).catch(() => []);
+      const slot = slots[0];
+      if (slot) setScheduler((current) => ({ ...(current || {}), date: slot.date, time: slot.time, availableSlots: slots }));
+      await typeAssistantMessage(`Esse horário não está livre na agenda. ${buildAvailableSlotsMessage(slots)}`);
+      toast.error("Horário indisponível na agenda");
     } finally {
       setScheduling(false);
     }
