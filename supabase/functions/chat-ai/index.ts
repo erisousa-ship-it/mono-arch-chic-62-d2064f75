@@ -29,6 +29,11 @@ const SYSTEM = `Você é a secretária virtual da Dra. Kênia Garcia E também a
   `Se precisar perguntar de novo o MESMO campo (porque a resposta veio incompleta/ambígua), REFORMULE a pergunta de outro jeito, mais curta e direta, citando o que já temos. ` +
   `Ex.: em vez de repetir "Qual o melhor dia para sua consulta?", diga "Para qual dia desta semana posso reservar?" ou "Prefere ainda esta semana ou a próxima?". ` +
   `Sempre avance para o PRÓXIMO campo que falta — nunca volte a um já preenchido. Se tudo já estiver coletado, confirme e emita o bloco <AGENDAMENTO>, não pergunte mais nada.\n\n` +
+  `## CONFIRMAÇÃO DE DATA/HORÁRIO (CRÍTICO)\n` +
+  `Assim que o cliente confirmar a data E o horário (ex.: "pode ser", "ok", "confirmo", "esse mesmo", "sim"), ` +
+  `NÃO pergunte mais sobre dia/hora. Trate como FECHADO. ` +
+  `Responda em UMA frase confirmando ("Confirmado: <dia da semana>, <dd/mm/aaaa> às <HH:MM>.") e, se ainda faltar algum dado obrigatório (nome, telefone, e-mail, cidade, modalidade), peça SOMENTE o próximo que falta. ` +
+  `Se já tiver tudo, emita imediatamente o bloco <AGENDAMENTO> na mesma mensagem e encerre a coleta. Proibido reabrir a discussão de data/horário após a confirmação.\n\n` +
   `## SEGURANÇA\nSe o dashboard estiver indisponível, NUNCA invente horários. Responda: "No momento não consegui acessar a agenda para confirmar a disponibilidade. Você pode tentar novamente em alguns instantes para que eu consulte os horários disponíveis."`;
 
 const ANALYSIS_INSTRUCTION = `Além da resposta ao cliente, analise tecnicamente o caso com base na LEGISLAÇÃO E JURISPRUDÊNCIA brasileira ` +
