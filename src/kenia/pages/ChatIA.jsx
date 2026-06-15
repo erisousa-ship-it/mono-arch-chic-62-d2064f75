@@ -858,6 +858,16 @@ export default function ChatIA() {
     });
     setInput("");
     setThinking(true);
+    const existingAppointment = confirmedAppointment || inferConfirmedAppointment(messagesRef.current);
+    const userIsChangingSchedule = isScheduleChangeRequest(msg);
+    if (existingAppointment && !userIsChangingSchedule && (SCHEDULE_REGEX.test(msg) || isSimpleConfirmation(msg))) {
+      setConfirmedAppointment(existingAppointment);
+      setScheduler(null);
+      setThinking(false);
+      await typeAssistantMessage(buildAlreadyConfirmedMessage(existingAppointment));
+      sendingRef.current = false;
+      return;
+    }
     const scheduleIntent = extractScheduleIntent(msg);
     if (scheduleIntent) {
       try {
@@ -867,6 +877,7 @@ export default function ChatIA() {
         });
         toast.success("Agendamento criado no painel da Agenda");
         upsertLead({ stage: "em_negociacao", urgency: "alta" });
+        setConfirmedAppointment(result);
         setScheduler(null);
         setThinking(false);
         await typeAssistantMessage(buildAppointmentMessage(result));
@@ -914,6 +925,7 @@ export default function ChatIA() {
           });
           toast.success("Consulta salva automaticamente na Agenda");
           upsertLead({ stage: "em_negociacao", urgency: "alta", description: agBlock.resumo_caso });
+          setConfirmedAppointment(result);
           // Substitui a resposta da IA pela confirmação rica com link Meet
           data = { ...data, response: buildAppointmentMessage(result) };
         } catch (err) {
@@ -939,7 +951,12 @@ export default function ChatIA() {
         } catch {}
         toast.success("Dra. Kênia foi notificada e está entrando na conversa", { duration: 4000 });
       }
-      const responseText = cleanRepeatedText(data.response);
+      const guardAppointment = confirmedAppointment || inferConfirmedAppointment(messagesRef.current);
+      const responseText = cleanRepeatedText(
+        guardAppointment && !userIsChangingSchedule
+          ? stripScheduleOffersAfterConfirmation(data.response, guardAppointment)
+          : data.response
+      );
       const speaker = data.handoff || activeSpeaker === "Dra. Kênia Garcia" ? "Dra. Kênia Garcia" : data.speaker || null;
       await typeAssistantMessage(responseText, data.audio_base64 || null, speaker);
       const wantsKenia = data.handoff || speaker === "Dra. Kênia Garcia";
@@ -987,6 +1004,7 @@ export default function ChatIA() {
     setSessionId(null);
     setAnalysis(null);
     setLeadId(null);
+    setConfirmedAppointment(null);
     setActiveSpeaker(ASSISTANT_SPEAKER);
     try { window.localStorage.removeItem(STORAGE_KEY); } catch {}
     stopAudio();
