@@ -860,7 +860,9 @@ export default function ChatIA() {
     setThinking(true);
     const existingAppointment = confirmedAppointment || inferConfirmedAppointment(messagesRef.current);
     const userIsChangingSchedule = isScheduleChangeRequest(msg);
-    if (existingAppointment && !userIsChangingSchedule && (SCHEDULE_REGEX.test(msg) || isSimpleConfirmation(msg))) {
+    const lastAssistantMessage = [...messagesRef.current].reverse().find((m) => m.role !== "user" && !m.typing);
+    const isConfirmingScheduleOffer = isSimpleConfirmation(msg) && hasScheduleOffer(lastAssistantMessage?.content);
+    if (existingAppointment && !userIsChangingSchedule && (SCHEDULE_REGEX.test(msg) || isConfirmingScheduleOffer)) {
       setConfirmedAppointment(existingAppointment);
       setScheduler(null);
       setThinking(false);
