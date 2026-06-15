@@ -977,9 +977,10 @@ const staticPost = (url, body = {}) => {
     return response(lead, 201);
   }
   if (path === "/whatsapp/send") {
+    const cleanBody = sanitizeTextBody(body);
     const messages = read("messages", seedMessages);
-    const msg = { id: nextId("msg"), text: body.text, from_me: true, created_at: nowIso() };
-    messages[body.contact_id] = [...(messages[body.contact_id] || []), msg];
+    const msg = { id: nextId("msg"), text: cleanBody.text, from_me: true, created_at: nowIso() };
+    messages[cleanBody.contact_id] = [...(messages[cleanBody.contact_id] || []), msg];
     write("messages", messages);
     return response({ message: msg, provider_result: { static: true } });
   }
@@ -1025,7 +1026,7 @@ const staticPost = (url, body = {}) => {
               : cloudReply;
             return response({
               session_id: data?.session_id || sessionId,
-              response: responseText,
+              response: enforceSecretarySecondPerson(responseText),
               audio_base64: data?.audio_base64 || null,
               appointment: data?.appointment || null,
               handoff: data?.handoff || false,
@@ -1130,7 +1131,7 @@ const staticPost = (url, body = {}) => {
           : cleanInternalChatMarkers(finalText);
         return response({
             session_id: sessionId,
-            response: responseText,
+            response: enforceSecretarySecondPerson(responseText),
             audio_base64: null,
             appointment: null,
             handoff: false,
@@ -1143,7 +1144,7 @@ const staticPost = (url, body = {}) => {
       }
       return response({
           session_id: sessionId,
-          response: fallbackReply,
+          response: enforceSecretarySecondPerson(fallbackReply),
           audio_base64: null,
           analysis: { acertividade: 40, qualificacao: "fallback" },
         });
