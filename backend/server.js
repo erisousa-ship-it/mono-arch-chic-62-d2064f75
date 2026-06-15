@@ -222,6 +222,80 @@ const buildTemporalSystemContext = () => {
   return `CONTEXTO TEMPORAL OBRIGATÓRIO: agora em Brasília/America/Sao_Paulo é ${now.br} (data ISO ${now.date}, hora ${now.time}). Use esta data para responder perguntas de data/hora e para converter termos como hoje/amanhã/segunda em agendamentos futuros.`;
 };
 
+// ============================================================
+// Disponibilidade de agenda (dashboard) — consulta Supabase e
+// calcula slots livres para a secretária IA oferecer ao cliente.
+// ============================================================
+const SCHEDULING_SLOTS = ["09:00", "10:00", "11:00", "14:00", "15:00", "16:00", "17:00"];
+const SCHEDULING_DAYS_AHEAD = 10;
+
+const fetchBookedAppointments = async () => {
+  if (!SUPABASE_URL || !APPT_KEY) return [];
+  try {
+    const today = getSaoPauloNow().date;
+    const url = `${SUPABASE_URL.replace(/\/+$/, "")}/rest/v1/appointments?select=appointment_date,appointment_time,status&appointment_date=gte.${today}&status=neq.cancelled`;
+    const r = await fetch(url, {
+      headers: { apikey: APPT_KEY, Authorization: `Bearer ${APPT_KEY}` },
+    });
+    if (!r.ok) return [];
+    const arr = await r.json();
+    return Array.isArray(arr) ? arr : [];
+  } catch (e) {
+    console.warn("fetchBookedAppointments falhou:", e.message);
+    return [];
+  }
+};
+
+const computeAvailableSlots = (booked = []) => {
+  const occupied = new Set(
+    booked
+      .filter((b) => b?.appointment_date && b?.appointment_time)
+      .map((b) => `${b.appointment_date}T${String(b.appointment_time).slice(0, 5)}`),
+  );
+  const now = getSaoPauloNow();
+  const [yy, mm, dd] = now.date.split("-").map(Number);
+  const startDate = new Date(Date.UTC(yy, mm - 1, dd));
+  const out = [];
+  for (let i = 0; i < SCHEDULING_DAYS_AHEAD && out.length < 5; i++) {
+    const d = new Date(startDate);
+    d.setUTCDate(d.getUTCDate() + i);
+    const dow = d.getUTCDay(); // 0=dom, 6=sáb
+    if (dow === 0 || dow === 6) continue;
+    const iso = d.toISOString().slice(0, 10);
+    const slots = SCHEDULING_SLOTS.filter((t) => {
+      if (occupied.has(`${iso}T${t}`)) return false;
+      if (iso === now.date && t <= now.time) return false;
+      return true;
+    });
+    if (slots.length === 0) continue;
+    const weekday = new Intl.DateTimeFormat("pt-BR", { weekday: "long", timeZone: "America/Sao_Paulo" })
+      .format(new Date(`${iso}T12:00:00Z`));
+    const human = new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit", timeZone: "America/Sao_Paulo" })
+      .format(new Date(`${iso}T12:00:00Z`));
+    out.push({ date: iso, weekday, human, slots });
+  }
+  return out;
+};
+
+const buildSchedulingContext = async () => {
+  const booked = await fetchBookedAppointments();
+  const available = computeAvailableSlots(booked);
+  if (available.length === 0) {
+    return "AGENDA DA DRA. KÊNIA: sem horários disponíveis nos próximos 10 dias úteis — peça preferência ao cliente e registre como pendente.";
+  }
+  const lines = available
+    .map((d) => `- ${d.weekday} ${d.human} (${d.date}): ${d.slots.join(", ")}`)
+    .join("\n");
+  return `AGENDA REAL DA DRA. KÊNIA (consulte antes de oferecer horários — NÃO invente dias/horas):
+${lines}
+
+REGRAS DE AGENDAMENTO:
+1. Ofereça SEMPRE 2 a 3 opções concretas tiradas EXCLUSIVAMENTE da lista acima (ex.: "posso oferecer terça 17/06 às 10h ou quinta 19/06 às 15h").
+2. Não sugira fim de semana nem horários fora da lista.
+3. Se o cliente recusar todas, pergunte preferência de turno (manhã/tarde) e ofereça outras opções AINDA da lista.
+4. Confirme com o cliente antes de fechar e só então emita o bloco <AGENDAMENTO> com a data/hora escolhida exatamente como aparece acima.`;
+};
+
 const userAskedTemporalInfo = (text = "") =>
   /\b(que\s+horas|qual\s+(?:é\s+)?(?:a\s+)?hora|hor[áa]rio\s+atual|agora\s+s[aã]o|data\s+de\s+hoje|qual\s+(?:é\s+)?(?:a\s+)?data|que\s+data|que\s+dia\s+(?:é|estamos|s[aã]o|de\s+hoje)|hoje\s+[ée]\s+que\s+dia|dia\s+da\s+semana|dia\s+de\s+hoje|que\s+m[eê]s|qual\s+(?:o\s+)?(?:dia|m[eê]s|ano))\b/i.test(String(text || ""));
 
@@ -344,8 +418,12 @@ async function generateAiReply(jid, text) {
     rememberMessage(jid, "assistant", temporalReply);
     return temporalReply;
   }
+  const schedulingContext = await buildSchedulingContext();
   const messages = [
-    { role: "system", content: `${state.config.bot_prompt || DEFAULT_BOT_PROMPT}\n\n${buildTemporalSystemContext()}` },
+    {
+      role: "system",
+      content: `${state.config.bot_prompt || DEFAULT_BOT_PROMPT}\n\n${buildTemporalSystemContext()}\n\n${schedulingContext}`,
+    },
     ...history,
   ];
 
