@@ -196,7 +196,7 @@ Deno.serve(async (req) => {
     let payload: any = null;
     try { payload = JSON.parse(call?.function?.arguments || "{}"); } catch { payload = {}; }
 
-    const reply = enforceSecondPerson(payload?.response || data?.choices?.[0]?.message?.content || "Pode me contar um pouco mais sobre o que aconteceu?");
+    const reply = enforceSecondPerson(stripPromptLeak(payload?.response || data?.choices?.[0]?.message?.content || "Pode me contar um pouco mais sobre o que aconteceu?"));
     const analysis = return_analysis ? (payload?.analysis || null) : null;
 
     return json({
