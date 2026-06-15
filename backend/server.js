@@ -90,6 +90,19 @@ const connectionState = () => {
   return "connecting";
 };
 
+const qrAgeMs = () => state.qrCreatedAt ? Date.now() - state.qrCreatedAt : null;
+const qrExpiresInSeconds = () => {
+  if (!state.qrExpiresAt) return null;
+  return Math.max(0, Math.ceil((state.qrExpiresAt - Date.now()) / 1000));
+};
+
+const markQrUnavailable = () => {
+  state.qr = null;
+  state.qrDataUrl = null;
+  state.qrCreatedAt = null;
+  state.qrExpiresAt = null;
+};
+
 const stopSock = (reason = "restart") => {
   try { state.sock?.end?.(new Error(reason)); } catch {}
   state.sock = null;
@@ -102,7 +115,17 @@ const resetAuthSession = async () => {
 
 const scheduleStart = (opts = {}) => {
   if (reconnectTimer) clearTimeout(reconnectTimer);
-  reconnectTimer = setTimeout(() => startSock(opts).catch((e) => { state.lastError = e.message; }), opts.delay || 2000);
+  reconnectTimer = setTimeout(() => startSock(opts).catch((e) => { state.lastError = e.message; }), opts.delay || 5000);
+};
+
+const renewQrIfStale = () => {
+  if (state.connected || state.starting) return false;
+  const age = qrAgeMs();
+  const now = Date.now();
+  if (age == null || age < QR_RENEW_AFTER_MS || now - state.lastQrRenewAt < QR_RENEW_AFTER_MS) return false;
+  state.lastQrRenewAt = now;
+  scheduleStart({ delay: 500, reason: "qr-renew" });
+  return true;
 };
 
 function auth(req, res, next) {
