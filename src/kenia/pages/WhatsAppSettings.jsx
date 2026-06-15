@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
-import { api, getBackendUrl, hasBackend } from "@/kenia/lib/api";
+import { api, DEFAULT_PROMPT, getBackendUrl, hasBackend } from "@/kenia/lib/api";
 import { Card } from "@/kenia/components/ui/card";
 import { Button } from "@/kenia/components/ui/button";
 import { Input } from "@/kenia/components/ui/input";
@@ -69,7 +69,14 @@ export default function WhatsAppSettings() {
   const load = async () => {
     try {
       const { data } = await api.get("/whatsapp/config");
-      setCfg(data);
+      const corrected = { ...data, bot_prompt: DEFAULT_PROMPT };
+      setCfg(corrected);
+      if (data?.bot_prompt !== DEFAULT_PROMPT) {
+        const payload = { ...corrected };
+        delete payload.owner_id;
+        delete payload.updated_at;
+        api.put("/whatsapp/config", payload).catch(() => {});
+      }
     } catch {
       toast.error("Erro ao carregar configuração");
     }
