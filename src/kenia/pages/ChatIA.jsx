@@ -707,19 +707,20 @@ export default function ChatIA() {
   const createAppointment = async ({ date, time, duration = 60, area = "" }) => {
     const starts_at = getAppointmentDateTime(date, time);
     const clientName = name?.trim() || "Cliente do chat";
-    const meetUrl = getMeetLink();
+    const fallbackMeetUrl = getMeetLink();
     const title = `Consulta — ${area || analysis?.area || "Atendimento jurídico"} · ${clientName}`;
-    await api.post("/appointments", {
+    const { data: created } = await api.post("/appointments", {
       title,
       client_name: clientName,
+      email: email || undefined,
+      phone: phone || undefined,
       starts_at,
       duration_min: Number(duration) || 60,
       location: "Google Meet",
-      meet_url: meetUrl,
-      meeting_link: meetUrl,
-      notes: [phone ? `WhatsApp: ${phone}` : "", `Meet: ${meetUrl}`].filter(Boolean).join(" · "),
+      notes: [phone ? `WhatsApp: ${phone}` : ""].filter(Boolean).join(" · "),
       status: "confirmado",
     });
+    const meetUrl = created?.meeting_link || created?.meet_url || fallbackMeetUrl;
     const human = new Date(starts_at).toLocaleString("pt-BR", {
       weekday: "long",
       day: "2-digit",
