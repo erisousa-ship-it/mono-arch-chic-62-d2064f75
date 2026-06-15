@@ -508,6 +508,78 @@ const buildNonRepeatingFallback = (message) => {
   return "Entendi. Para seguir sem repetir informações, me conte em poucas palavras o que aconteceu e qual ajuda você precisa agora.";
 };
 
+const clampPercent = (value, fallback = 50) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.max(0, Math.min(100, Math.round(n)));
+};
+
+const buildCaseAnalysis = (message = "", history = []) => {
+  const userMessages = [
+    ...(Array.isArray(history) ? history : []).filter((m) => m.role === "user").map((m) => m.content),
+    message,
+  ].join("\n");
+  const text = String(userMessages || message || "");
+  const lower = normalizePortuguese(text);
+  const rules = [
+    { area: "Família", rx: /\b(divorcio|guarda|pensao|alimentos|inventario|uniao estavel|visita|partilha)\b/, fundamentos: ["Código Civil, arts. 1.571 a 1.582", "CPC, procedimentos de família", "Lei de Alimentos 5.478/68"] },
+    { area: "Trabalhista", rx: /\b(demissao|rescisao|clt|fgts|verbas|ferias|decimo|hora extra|salario|trabalho|emprego)\b/, fundamentos: ["CLT", "CF/88, art. 7º", "Prazos trabalhistas aplicáveis ao caso"] },
+    { area: "Previdenciário/INSS", rx: /\b(inss|aposentadoria|beneficio|auxilio|bpc|loas|pericia|previdenciario)\b/, fundamentos: ["Lei 8.213/91", "Decreto 3.048/99", "Regras administrativas do INSS"] },
+    { area: "Consumidor", rx: /\b(consumidor|compra|produto|servico|defeito|garantia|cobranca|negativacao|banco|cartao)\b/, fundamentos: ["Código de Defesa do Consumidor", "CDC, arts. 6º, 14, 18 e 42", "Entendimento dos Juizados Especiais quando cabível"] },
+    { area: "Cível", rx: /\b(contrato|cobranca|indenizacao|dano moral|aluguel|locacao|imovel|vizinho|divida)\b/, fundamentos: ["Código Civil", "CPC", "Lei do Inquilinato 8.245/91 quando houver locação"] },
+    { area: "Criminal", rx: /\b(boletim|ocorrencia|prisao|ameaca|agressao|crime|medida protetiva|violencia)\b/, fundamentos: ["Código Penal", "CPP", "Lei Maria da Penha quando houver violência doméstica"] },
+  ];
+  const match = rules.find((rule) => rule.rx.test(lower));
+  const hasLegalSignal = Boolean(match) || /\b(processo|audiencia|intimacao|prazo|documento|advogada|juridic|direito|lei|acao)\b/.test(lower);
+  const hasFacts = text.replace(/\s+/g, " ").trim().length >= 35;
+  const hasDate = /\b\d{1,2}[\/\-]\d{1,2}(?:[\/\-]\d{2,4})?|ontem|hoje|semana|mes|ano|dias?\b/i.test(text);
+  const hasDocs = /\b(documento|contrato|holerite|trct|comprovante|print|mensagem|audio|foto|laudo|carta|intimacao)\b/i.test(text);
+  const hasUrgency = /\b(urgente|prazo|audiencia|intimacao|prisao|violencia|despejo|bloqueio|demitido|corte)\b/i.test(text);
+  const acertividade = clampPercent(30 + (hasLegalSignal ? 22 : 0) + (hasFacts ? 18 : 0) + (hasDate ? 12 : 0) + (hasDocs ? 10 : 0) + (hasUrgency ? 8 : 0), hasFacts ? 58 : 42);
+  const qualificacao = hasLegalSignal && (hasFacts || hasUrgency) ? "qualificado" : "necessita_mais_info";
+  const chance_exito = clampPercent((qualificacao === "qualificado" ? 48 : 28) + (hasFacts ? 15 : 0) + (hasDate ? 8 : 0) + (hasDocs ? 12 : 0) + (hasUrgency ? 5 : 0), 45);
+  const area = match?.area || (hasLegalSignal ? "Atendimento jurídico" : "Em análise");
+  const proxima_pergunta = !hasFacts
+    ? "Pode me contar, em poucas palavras, o que aconteceu e quando aconteceu?"
+    : !hasDate
+      ? "Em que data ou período isso aconteceu?"
+      : !hasDocs
+        ? "Você possui algum documento, mensagem, contrato ou comprovante sobre esse caso?"
+        : "Qual resultado você pretende alcançar com esse atendimento?";
+
+  return {
+    acertividade,
+    chance_exito,
+    qualificacao,
+    area,
+    resumo: hasFacts ? text.replace(/\s+/g, " ").trim().slice(0, 260) : "Ainda faltam detalhes do caso para uma análise técnica completa.",
+    motivo: qualificacao === "qualificado"
+      ? "A mensagem já traz sinais jurídicos suficientes para iniciar a triagem e indicar os próximos documentos necessários."
+      : "A análise foi iniciada, mas precisa de fatos, datas e documentos para aumentar a precisão.",
+    proxima_pergunta,
+    fundamentos: match?.fundamentos || ["Triagem jurídica preliminar", "Análise documental", "Confirmação de fatos, datas e prazos"],
+  };
+};
+
+const normalizeCaseAnalysis = (raw, message = "", history = []) => {
+  const fallback = buildCaseAnalysis(message, history);
+  if (!raw || typeof raw !== "object") return fallback;
+  const allowed = new Set(["qualificado", "nao_qualificado", "necessita_mais_info"]);
+  const qualificacao = allowed.has(raw.qualificacao) ? raw.qualificacao : fallback.qualificacao;
+  return {
+    ...fallback,
+    ...raw,
+    qualificacao,
+    acertividade: clampPercent(raw.acertividade, fallback.acertividade),
+    chance_exito: clampPercent(raw.chance_exito, fallback.chance_exito),
+    area: raw.area || fallback.area,
+    resumo: raw.resumo || fallback.resumo,
+    motivo: raw.motivo || fallback.motivo,
+    proxima_pergunta: raw.proxima_pergunta || fallback.proxima_pergunta,
+    fundamentos: Array.isArray(raw.fundamentos) && raw.fundamentos.length ? raw.fundamentos : fallback.fundamentos,
+  };
+};
+
 const userAskedTemporalInfo = (text) =>
   /\b(que\s+horas|qual\s+(?:é\s+)?(?:a\s+)?hora|hor[áa]rio\s+atual|agora\s+s[aã]o|data\s+de\s+hoje|qual\s+(?:é\s+)?(?:a\s+)?data|que\s+data|que\s+dia\s+(?:é|estamos|s[aã]o|de\s+hoje)|hoje\s+[ée]\s+que\s+dia|dia\s+da\s+semana|dia\s+de\s+hoje|que\s+m[eê]s|qual\s+(?:o\s+)?(?:dia|m[eê]s|ano))\b/i.test(String(text || ""));
 
