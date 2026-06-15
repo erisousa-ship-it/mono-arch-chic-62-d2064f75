@@ -213,7 +213,11 @@ export default function Creatives() {
     a.click();
   };
 
-  const imageSrc = (value) => String(value || "").startsWith("data:") ? value : `data:image/png;base64,${value}`;
+  const imageSrc = (value) => {
+    const src = String(value || "");
+    if (src.startsWith("data:") || /^https?:\/\//i.test(src)) return src;
+    return `data:image/png;base64,${src}`;
+  };
 
   const NetIcon = ({ network, className }) => {
     if (network === "instagram") return <Instagram className={className} />;

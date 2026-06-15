@@ -1145,6 +1145,8 @@ const staticPost = (url, body = {}) => {
         const data = res?.data || {};
         if (data?.ok && data?.image_base64) {
           b64 = `data:${data.mime_type || "image/png"};base64,${data.image_base64}`;
+        } else if (data?.ok && data?.image_url) {
+          b64 = data.image_url;
         } else if (data?.error) {
           genError = data.error;
         }
