@@ -1147,12 +1147,23 @@ const staticPost = (url, body = {}) => {
             logo_base64: body.logo_base64 || null,
           },
         });
-        if (error) throw error;
+        if (error) {
+          let detail = error?.message || String(error);
+          try {
+            const ctxJson = await error?.context?.json?.();
+            if (ctxJson?.error) detail = typeof ctxJson.error === "string" ? ctxJson.error : JSON.stringify(ctxJson.error);
+            if (ctxJson?.upstream_status === 402 || /not enough credits|payment_required/i.test(detail)) {
+              detail = "Créditos da Lovable AI esgotados. Recarregue em Configurações → Cloud & AI balance.";
+            }
+          } catch { /* ignore */ }
+          genError = detail;
+          throw new Error(detail);
+        }
         b64 = data?.image_data_url || data?.b64_json || "";
         if (b64 && !b64.startsWith("data:")) b64 = `data:image/png;base64,${b64}`;
         if (!b64 && data?.error) genError = data.error;
       } catch (e) {
-        genError = e?.message || String(e);
+        genError = genError || e?.message || String(e);
       }
       // 2) Fallback: backend Render (caso a edge function falhe).
       if (!b64) {
