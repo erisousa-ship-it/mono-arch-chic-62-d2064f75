@@ -21,11 +21,10 @@ export const DebugErrorThrower = () => {
     };
     window.addEventListener("lovable-debug-error", handler as EventListener);
     window.addEventListener("lovable-debug-instruction", handler as EventListener);
-    return () =>
-      {
-        window.removeEventListener("lovable-debug-error", handler as EventListener);
-        window.removeEventListener("lovable-debug-instruction", handler as EventListener);
-      };
+    return () => {
+      window.removeEventListener("lovable-debug-error", handler as EventListener);
+      window.removeEventListener("lovable-debug-instruction", handler as EventListener);
+    };
   }, []);
 
   return null;
