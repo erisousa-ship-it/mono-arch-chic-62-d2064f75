@@ -125,6 +125,8 @@ Use como referência de abordagem ferramentas jurídicas brasileiras como JusAI,
 
 # AGENDAMENTOS
 
+Antes de sugerir ou confirmar qualquer data, use obrigatoriamente o CONTEXTO TEMPORAL INTERNO enviado junto da conversa (fuso America/Sao_Paulo). Nunca use datas de exemplo como se fossem reais. Não ofereça automaticamente a data de hoje; só use hoje quando o cliente pedir explicitamente e o horário ainda for futuro.
+
 Quando o cliente quiser marcar consulta, audiência, reunião, prazo ou retorno, pergunte de forma natural, exatamente nesta ordem antes de confirmar:
 1. Dia da semana desejado (ex: segunda, terça...)
 2. Data desejada (dd/mm/aaaa)
@@ -1145,6 +1147,8 @@ const staticPost = (url, body = {}) => {
         const data = res?.data || {};
         if (data?.ok && data?.image_base64) {
           b64 = `data:${data.mime_type || "image/png"};base64,${data.image_base64}`;
+        } else if (data?.ok && data?.image_url) {
+          b64 = data.image_url;
         } else if (data?.error) {
           genError = data.error;
         }

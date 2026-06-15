@@ -18,6 +18,10 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPA
 const AI_ROUTER_URL = (process.env.AI_ROUTER_URL || `${SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/ai-router`).replace(/\/+$/, "");
 const OLLAMA_BASE_URL = (process.env.OLLAMA_BASE_URL || process.env.OLLAMA_URL || "").replace(/\/+$/, "");
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen2.5:3b-instruct";
+const EMERGENT_BASE_URL = (process.env.EMERGENT_BASE_URL || "https://api.emergent.sh/v1").replace(/\/+$/, "");
+const EMERGENT_API_KEY = process.env.EMERGENT_API_KEY || "";
+const EMERGENT_TEXT_MODEL = process.env.EMERGENT_TEXT_MODEL || "gpt-4o-mini";
+const EMERGENT_IMAGE_MODEL = process.env.EMERGENT_IMAGE_MODEL || "gpt-image-1";
 
 const DEFAULT_BOT_PROMPT = `Você é a secretária jurídica da Dra. Kênia Garcia atendendo pelo WhatsApp.
 Responda sempre em português do Brasil, com tom humano, acolhedor, profissional e objetivo.
@@ -41,7 +45,8 @@ Faça uma pergunta por vez, mantenha continuidade pelo histórico e encaminhe pa
 - Fontes jurídicas confiáveis para apoiar respostas: planalto.gov.br, jusbrasil.com.br, STF, STJ, CNJ. Nunca invente leis, súmulas ou números de processo.
 
 # AGENDAMENTO DE CONSULTA (REGRA CRÍTICA)
-Quando o cliente quiser marcar consulta/reunião, colete em ordem (uma pergunta por vez): nome completo, telefone, e-mail (se tiver), cidade, área jurídica do caso, breve resumo, data desejada (dd/mm/aaaa) e horário (HH:MM).
+Use sempre a DATA/HORA ATUAL informada no contexto do sistema (fuso America/Sao_Paulo). Nunca use datas de exemplo como data real. Se o cliente disser "hoje", "amanhã", "segunda" ou outro termo relativo, converta a partir da data atual do contexto; se houver ambiguidade, confirme antes.
+Quando o cliente quiser marcar consulta/reunião, colete em ordem (uma pergunta por vez): nome completo, telefone, e-mail (se tiver), cidade, área jurídica do caso, breve resumo, data desejada (dd/mm/aaaa) e horário (HH:MM). Não ofereça automaticamente a data de hoje; ofereça apenas horários futuros em dias úteis, salvo se o cliente pedir expressamente atendimento hoje.
 Ao ter os dados essenciais (nome, data, hora), CONFIRME em texto natural (ex.: "Confirmado: 17/06/2026 às 14:00") e na MESMA mensagem inclua, ao final, EXATAMENTE este bloco — sem markdown, sem crases, sem alterar as tags:
 <AGENDAMENTO>
 {"nome":"...","telefone":"...","email":"...","cidade":"...","area_juridica":"...","resumo_caso":"...","data_agendamento":"YYYY-MM-DD","horario_agendamento":"HH:MM"}
@@ -66,6 +71,7 @@ const state = {
   autoReplyCount: 0,
   qrAttempts: 0,
   config: { provider: "baileys", bot_enabled: true, bot_prompt: DEFAULT_BOT_PROMPT },
+  settings: { llm_text_key: "", llm_image_key: "" },
 };
 
 let startSeq = 0;
@@ -188,6 +194,93 @@ const rememberMessage = (jid, role, content) => {
   return conversationHistory.get(jid);
 };
 
+const maskKey = (key = "") => key ? `${key.slice(0, 6)}...${key.slice(-4)}` : "Emergent padrão";
+
+const getSaoPauloNow = () => {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    weekday: "long",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(now).reduce((acc, part) => ({ ...acc, [part.type]: part.value }), {});
+  return {
+    iso: now.toISOString(),
+    br: `${parts.weekday}, ${parts.day}/${parts.month}/${parts.year} às ${parts.hour}:${parts.minute}`,
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    time: `${parts.hour}:${parts.minute}`,
+  };
+};
+
+const buildTemporalSystemContext = () => {
+  const now = getSaoPauloNow();
+  return `CONTEXTO TEMPORAL OBRIGATÓRIO: agora em Brasília/America/Sao_Paulo é ${now.br} (data ISO ${now.date}, hora ${now.time}). Use esta data para responder perguntas de data/hora e para converter termos como hoje/amanhã/segunda em agendamentos futuros.`;
+};
+
+const userAskedTemporalInfo = (text = "") =>
+  /\b(que\s+horas|qual\s+(?:é\s+)?(?:a\s+)?hora|hor[áa]rio\s+atual|agora\s+s[aã]o|data\s+de\s+hoje|qual\s+(?:é\s+)?(?:a\s+)?data|que\s+data|que\s+dia\s+(?:é|estamos|s[aã]o|de\s+hoje)|hoje\s+[ée]\s+que\s+dia|dia\s+da\s+semana|dia\s+de\s+hoje|que\s+m[eê]s|qual\s+(?:o\s+)?(?:dia|m[eê]s|ano))\b/i.test(String(text || ""));
+
+const buildTemporalAnswer = () => {
+  const now = getSaoPauloNow();
+  return `Hoje é ${now.br}.`;
+};
+
+const parseImagePayload = (data = {}) => {
+  const item = data?.data?.[0] || {};
+  const b64 = item.b64_json || data.image_base64 || data.b64_json;
+  const url = item.url || data.image_url || data.url;
+  if (b64) return { image_base64: String(b64).replace(/^data:image\/[^;]+;base64,/, ""), mime_type: data.mime_type || "image/png" };
+  if (url) return { image_url: url, mime_type: data.mime_type || "image/png" };
+  return null;
+};
+
+const callEmergentImage = async ({ prompt, style = "", reference_image_base64 = null, key = "" }) => {
+  const apiKey = key || state.settings.llm_image_key || EMERGENT_API_KEY;
+  if (!apiKey) throw new Error("EMERGENT_API_KEY não configurada");
+  const finalPrompt = [
+    "Crie um criativo jurídico profissional para a Dra. Kênia Garcia, sem texto e sem letras dentro da imagem.",
+    style ? `Formato/estilo: ${style}.` : "",
+    `Tema: ${prompt}`,
+  ].filter(Boolean).join("\n");
+  const body = {
+    model: EMERGENT_IMAGE_MODEL,
+    prompt: finalPrompt,
+    size: "1024x1024",
+    n: 1,
+    ...(reference_image_base64 ? { image: reference_image_base64 } : {}),
+  };
+  const r = await fetch(`${EMERGENT_BASE_URL}/images/generations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify(body),
+  });
+  const raw = await r.text();
+  if (!r.ok) throw new Error(`emergent_image_${r.status}: ${raw.slice(0, 500)}`);
+  const parsed = parseImagePayload(JSON.parse(raw || "{}"));
+  if (!parsed) throw new Error("emergent_image_empty_response");
+  return parsed;
+};
+
+const callEmergentChat = async ({ messages, key = "" }) => {
+  const apiKey = key || state.settings.llm_text_key || EMERGENT_API_KEY;
+  if (!apiKey) throw new Error("EMERGENT_API_KEY não configurada");
+  const r = await fetch(`${EMERGENT_BASE_URL}/chat/completions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ model: EMERGENT_TEXT_MODEL, messages }),
+  });
+  const raw = await r.text();
+  if (!r.ok) throw new Error(`emergent_chat_${r.status}: ${raw.slice(0, 500)}`);
+  const data = JSON.parse(raw || "{}");
+  const text = String(data?.choices?.[0]?.message?.content || "").trim();
+  if (!text) throw new Error("emergent_chat_empty_response");
+  return text;
+};
+
 async function generateDirectOllamaReply(messages) {
   if (!OLLAMA_BASE_URL) throw new Error("OLLAMA_BASE_URL não configurado no backend WhatsApp");
   const controller = new AbortController();
@@ -214,10 +307,25 @@ async function generateDirectOllamaReply(messages) {
 
 async function generateAiReply(jid, text) {
   const history = rememberMessage(jid, "user", text);
+  if (userAskedTemporalInfo(text)) {
+    const temporalReply = buildTemporalAnswer();
+    rememberMessage(jid, "assistant", temporalReply);
+    return temporalReply;
+  }
   const messages = [
-    { role: "system", content: state.config.bot_prompt || DEFAULT_BOT_PROMPT },
+    { role: "system", content: `${state.config.bot_prompt || DEFAULT_BOT_PROMPT}\n\n${buildTemporalSystemContext()}` },
     ...history,
   ];
+
+  const emergentReply = await callEmergentChat({ messages }).catch((e) => {
+    state.lastAiError = e.message;
+    return null;
+  });
+  if (emergentReply) {
+    rememberMessage(jid, "assistant", emergentReply);
+    state.lastAiError = null;
+    return emergentReply;
+  }
 
   const directReply = await generateDirectOllamaReply(messages).catch((e) => {
     state.lastAiError = e.message;
@@ -418,6 +526,51 @@ app.get("/api/ai/ping", async (_req, res) => {
     if (!result.chat_ok) result.error = `chat HTTP ${r.status}: ${data?.error || ""}`;
   } catch (e) { result.error = `chat: ${e.message}`; }
   res.json(result);
+});
+
+app.get("/api/settings", auth, (_req, res) => {
+  res.json({
+    using_default_text: !state.settings.llm_text_key,
+    using_default_image: !state.settings.llm_image_key,
+    llm_text_key_masked: maskKey(state.settings.llm_text_key || EMERGENT_API_KEY),
+    llm_image_key_masked: maskKey(state.settings.llm_image_key || EMERGENT_API_KEY),
+    emergent_configured: !!(state.settings.llm_text_key || state.settings.llm_image_key || EMERGENT_API_KEY),
+    emergent_base_url: EMERGENT_BASE_URL,
+  });
+});
+
+app.put("/api/settings", auth, (req, res) => {
+  const body = req.body || {};
+  if ("llm_text_key" in body) state.settings.llm_text_key = String(body.llm_text_key || "").trim();
+  if ("llm_image_key" in body) state.settings.llm_image_key = String(body.llm_image_key || "").trim();
+  res.json({ ok: true });
+});
+
+app.post("/api/settings/test-text", auth, async (_req, res) => {
+  try {
+    const text = await callEmergentChat({ messages: [{ role: "user", content: "Responda apenas: ok" }] });
+    res.json({ ok: true, provider: "emergent", model: EMERGENT_TEXT_MODEL, using_custom_key: !!state.settings.llm_text_key, sample: text.slice(0, 80) });
+  } catch (e) {
+    res.status(500).json({ ok: false, provider: "emergent", model: EMERGENT_TEXT_MODEL, error: e.message });
+  }
+});
+
+app.post("/api/settings/test-image", auth, async (_req, res) => {
+  try {
+    const img = await callEmergentImage({ prompt: "ícone jurídico abstrato elegante", style: "teste técnico simples" });
+    res.json({ ok: true, provider: "emergent", model: EMERGENT_IMAGE_MODEL, using_custom_key: !!state.settings.llm_image_key, has_image: !!(img.image_base64 || img.image_url) });
+  } catch (e) {
+    res.status(500).json({ ok: false, provider: "emergent", model: EMERGENT_IMAGE_MODEL, error: e.message });
+  }
+});
+
+app.post("/api/generate-image", auth, async (req, res) => {
+  try {
+    const result = await callEmergentImage(req.body || {});
+    res.json({ ok: true, provider: "emergent", model: EMERGENT_IMAGE_MODEL, ...result });
+  } catch (e) {
+    res.status(500).json({ ok: false, provider: "emergent", model: EMERGENT_IMAGE_MODEL, error: e.message });
+  }
 });
 
 app.get("/api/whatsapp/config", auth, (_req, res) => {

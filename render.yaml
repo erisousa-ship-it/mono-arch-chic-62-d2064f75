@@ -44,3 +44,7 @@ services:
         value: qwen2.5:3b-instruct
       - key: OLLAMA_BASE_URL
         sync: false
+      - key: EMERGENT_BASE_URL
+        value: https://api.emergent.sh/v1
+      - key: EMERGENT_API_KEY
+        sync: false

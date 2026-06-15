@@ -122,7 +122,7 @@ export default function Settings() {
             <div className="text-sm text-nude-700">
               <div className="font-medium mb-1">Sobre as chaves</div>
               <div className="text-xs">
-                Por padrão, usamos a <strong>Emergent Universal Key</strong> que já vem configurada e funciona para chat (GPT-4o-mini) e imagens (gpt-image-1). Se você tiver uma chave OpenAI própria, pode substituir aqui para usar créditos próprios.
+                Por padrão, o sistema testa primeiro a <strong>Emergent API Key</strong> para chat e imagens; se a geração de imagens falhar, usa o fallback seguro configurado no projeto.
               </div>
             </div>
           </div>
@@ -187,7 +187,7 @@ export default function Settings() {
                 <h3 className="font-display font-semibold text-base">Geração de Imagens (Criativos)</h3>
               </div>
               <p className="text-sm text-nude-500">
-                Chave usada para gerar imagens no módulo <strong>Criativos</strong> usando OpenAI <code className="text-xs bg-nude-100 px-1 rounded">gpt-image-1</code>.
+                Chave usada primeiro para gerar imagens no módulo <strong>Criativos</strong> com a API da Emergent.
               </p>
             </div>
             <Badge className={settings.using_default_image ? "bg-blue-100 text-blue-800 hover:bg-blue-100" : "bg-gold-100 text-gold-800 hover:bg-gold-100"}>
