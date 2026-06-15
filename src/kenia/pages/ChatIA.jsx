@@ -976,11 +976,10 @@ export default function ChatIA() {
       {/* Main Layout */}
       <div className="flex-1 flex flex-col lg:grid lg:grid-cols-12 gap-3 sm:gap-4 p-3 sm:p-4 lg:overflow-hidden min-h-0">
         {/* CHAT */}
-        {!showAnalysisPanel && (
-          <Card
-            className="flex-1 min-h-[60vh] lg:min-h-0 lg:col-span-8 flex flex-col overflow-hidden border-nude-200"
-            data-testid="chat-panel"
-          >
+        <Card
+          className={`flex-1 min-h-[60vh] lg:min-h-0 lg:col-span-8 flex-col overflow-hidden border-nude-200 ${showAnalysisPanel ? "hidden lg:flex" : "flex"}`}
+          data-testid="chat-panel"
+        >
             {/* visitor info */}
             <div className="px-3 sm:px-5 py-3 border-b border-nude-200 bg-nude-50/60 flex items-center gap-2 flex-wrap">
               <Bot className="w-4 h-4 text-gold-600 shrink-0" />
@@ -1229,15 +1228,13 @@ export default function ChatIA() {
                 </Button>
               </div>
             </div>
-          </Card>
-        )}
+        </Card>
 
         {/* ANALYSIS SIDE */}
-        {showAnalysisPanel && (
-          <Card
-            className="lg:col-span-4 flex flex-col overflow-hidden border-nude-200"
-            data-testid="analysis-panel"
-          >
+        <Card
+          className={`lg:col-span-4 flex-col overflow-hidden border-nude-200 ${showAnalysisPanel ? "flex" : "hidden lg:flex"}`}
+          data-testid="analysis-panel"
+        >
             <div className="px-5 py-3 border-b border-nude-200 bg-nude-50/60">
               <div className="overline text-gold-600">Análise em tempo real</div>
               <h2 className="font-serif text-xl text-nude-900 mt-0.5">Acertividade do caso</h2>
@@ -1247,7 +1244,7 @@ export default function ChatIA() {
               <div className="p-5 space-y-5">
                 {!analysis ? (
                   <div className="text-sm text-nude-500 text-center py-10">
-                    A análise aparecerá aqui assim que a Dra. Ana ouvir os primeiros detalhes do seu caso.
+                    A análise aparecerá aqui assim que a Dra. Kênia ouvir os primeiros detalhes do seu caso.
                   </div>
                 ) : (
                   <>
@@ -1386,8 +1383,7 @@ export default function ChatIA() {
                 )}
               </div>
             </ScrollArea>
-          </Card>
-        )}
+        </Card>
       </div>
     </div>
   );
