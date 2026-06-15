@@ -521,6 +521,9 @@ async function startSock({ clearAuth = false } = {}) {
   state.lastError = null;
 
   const { state: authState, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+  // Restaurar credenciais persistidas (Supabase) ANTES de iniciar o socket
+  // só faz sentido na primeira inicialização (quando o diretório está vazio).
+  // Aqui já carregamos via useMultiFileAuthState; se vazio, restauramos e relemos.
   const { version } = await fetchLatestBaileysVersion();
   const sock = makeWASocket({
     auth: authState,
@@ -542,7 +545,10 @@ async function startSock({ clearAuth = false } = {}) {
     }
   }, 25000);
 
-  sock.ev.on("creds.update", saveCreds);
+  sock.ev.on("creds.update", async () => {
+    await saveCreds();
+    queueSync(AUTH_DIR);
+  });
   sock.ev.on("connection.update", async (update) => {
     if (seq !== startSeq) return;
     const { connection, lastDisconnect, qr } = update;
