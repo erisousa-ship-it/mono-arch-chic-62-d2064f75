@@ -1182,6 +1182,7 @@ const staticPost = (url, body = {}) => {
               history: body.history || [],
               session_id: sessionId,
               user_id: body.user_id || null,
+              schedule_context: body.schedule_context || "",
               want_audio: body.want_audio === true,
               return_analysis: body.return_analysis === true,
             },
@@ -1247,7 +1248,7 @@ const staticPost = (url, body = {}) => {
             server_time: new Date().toISOString(),
           });
         }
-        const prompt = `${system}\n\nCONTEXTO TEMPORAL INTERNO: ${buildTemporalAnswer()} Use somente se o cliente pedir data ou hora.\n\n${history}\nCliente: ${userText}\nAssistente:`;
+        const prompt = `${system}\n\nCONTEXTO TEMPORAL INTERNO: ${buildTemporalAnswer()} Use somente se o cliente pedir data ou hora.\n\n${body.schedule_context || ""}\n\n${history}\nCliente: ${userText}\nAssistente:`;
 
         const tryModel = async (modelName) => {
           const controller = new AbortController();
