@@ -22,6 +22,7 @@ const EMERGENT_BASE_URL = (process.env.EMERGENT_BASE_URL || "https://api.emergen
 const EMERGENT_API_KEY = process.env.EMERGENT_API_KEY || "";
 const EMERGENT_TEXT_MODEL = process.env.EMERGENT_TEXT_MODEL || "gpt-4o-mini";
 const EMERGENT_IMAGE_MODEL = process.env.EMERGENT_IMAGE_MODEL || "gpt-image-1";
+const LOVABLE_API_KEY = process.env.LOVABLE_API_KEY || "";
 
 const DEFAULT_BOT_PROMPT = `Você é a secretária jurídica da Dra. Kênia Garcia atendendo pelo WhatsApp.
 Responda sempre em português do Brasil, com tom humano, acolhedor, profissional e objetivo.
@@ -262,6 +263,37 @@ const callEmergentImage = async ({ prompt, style = "", reference_image_base64 = 
   if (!r.ok) throw new Error(`emergent_image_${r.status}: ${raw.slice(0, 500)}`);
   const parsed = parseImagePayload(JSON.parse(raw || "{}"));
   if (!parsed) throw new Error("emergent_image_empty_response");
+  return parsed;
+};
+
+const callLovableImage = async ({ prompt, style = "" }) => {
+  const finalPrompt = [
+    "Crie um criativo jurídico profissional para a Dra. Kênia Garcia, sem texto e sem letras dentro da imagem.",
+    style ? `Formato/estilo: ${style}.` : "",
+    `Tema: ${prompt}`,
+  ].filter(Boolean).join("\n");
+  if (!LOVABLE_API_KEY) {
+    const r = await fetch(AI_ROUTER_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...(SUPABASE_ANON_KEY ? { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } : {}) },
+      body: JSON.stringify({ mode: "image", prompt: finalPrompt }),
+    });
+    const raw = await r.text();
+    if (!r.ok) throw new Error(`lovable_edge_image_${r.status}: ${raw.slice(0, 500)}`);
+    const data = JSON.parse(raw || "{}");
+    if (data.image?.startsWith("data:")) return { image_base64: data.image.split(",")[1], mime_type: "image/png" };
+    if (data.image) return { image_url: data.image, mime_type: "image/png" };
+    throw new Error("lovable_edge_image_empty_response");
+  }
+  const r = await fetch("https://ai.gateway.lovable.dev/v1/images/generations", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${LOVABLE_API_KEY}` },
+    body: JSON.stringify({ model: "openai/gpt-image-2", prompt: finalPrompt, quality: "low", size: "1024x1024", n: 1, stream: false }),
+  });
+  const raw = await r.text();
+  if (!r.ok) throw new Error(`lovable_image_${r.status}: ${raw.slice(0, 500)}`);
+  const parsed = parseImagePayload(JSON.parse(raw || "{}"));
+  if (!parsed) throw new Error("lovable_image_empty_response");
   return parsed;
 };
 
@@ -560,7 +592,12 @@ app.post("/api/settings/test-image", auth, async (_req, res) => {
     const img = await callEmergentImage({ prompt: "ícone jurídico abstrato elegante", style: "teste técnico simples" });
     res.json({ ok: true, provider: "emergent", model: EMERGENT_IMAGE_MODEL, using_custom_key: !!state.settings.llm_image_key, has_image: !!(img.image_base64 || img.image_url) });
   } catch (e) {
-    res.status(500).json({ ok: false, provider: "emergent", model: EMERGENT_IMAGE_MODEL, error: e.message });
+    try {
+      const fallback = await callLovableImage({ prompt: "ícone jurídico abstrato elegante", style: "teste técnico simples" });
+      res.json({ ok: true, provider: "lovable", model: "openai/gpt-image-2", using_custom_key: !!state.settings.llm_image_key, has_image: !!(fallback.image_base64 || fallback.image_url), warning: e.message });
+    } catch (fallbackError) {
+      res.status(500).json({ ok: false, provider: "emergent", model: EMERGENT_IMAGE_MODEL, error: `${e.message} | fallback_lovable: ${fallbackError.message}` });
+    }
   }
 });
 
@@ -569,7 +606,12 @@ app.post("/api/generate-image", auth, async (req, res) => {
     const result = await callEmergentImage(req.body || {});
     res.json({ ok: true, provider: "emergent", model: EMERGENT_IMAGE_MODEL, ...result });
   } catch (e) {
-    res.status(500).json({ ok: false, provider: "emergent", model: EMERGENT_IMAGE_MODEL, error: e.message });
+    try {
+      const result = await callLovableImage(req.body || {});
+      res.json({ ok: true, provider: "lovable", model: "openai/gpt-image-2", warning: e.message, ...result });
+    } catch (fallbackError) {
+      res.status(500).json({ ok: false, provider: "emergent", model: EMERGENT_IMAGE_MODEL, error: `${e.message} | fallback_lovable: ${fallbackError.message}` });
+    }
   }
 });
 

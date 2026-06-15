@@ -1,6 +1,7 @@
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
 const toDataUrl = (b64?: string | null) => {
@@ -78,13 +79,16 @@ Deno.serve(async (req) => {
       });
     }
 
-    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const resp = await fetch("https://ai.gateway.lovable.dev/v1/images/generations", {
       method: "POST",
       headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image-preview",
-        messages: [{ role: "user", content: userContent }],
-        modalities: ["image", "text"],
+        model: "openai/gpt-image-2",
+        prompt: userText,
+        quality: "low",
+        size: "1024x1024",
+        n: 1,
+        stream: false,
       }),
     });
 
@@ -108,7 +112,7 @@ Deno.serve(async (req) => {
     }
 
     const b64Only = dataUrl.startsWith("data:") ? dataUrl.split(",")[1] : dataUrl;
-    return new Response(JSON.stringify({ image_data_url: dataUrl, b64_json: b64Only }), {
+    return new Response(JSON.stringify({ image_data_url: dataUrl, b64_json: b64Only, provider: "lovable" }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {

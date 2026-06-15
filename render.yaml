@@ -48,3 +48,5 @@ services:
         value: https://api.emergent.sh/v1
       - key: EMERGENT_API_KEY
         sync: false
+      - key: LOVABLE_API_KEY
+        sync: false
