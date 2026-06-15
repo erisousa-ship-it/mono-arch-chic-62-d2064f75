@@ -9,6 +9,7 @@ import {
   DisconnectReason,
   fetchLatestBaileysVersion,
 } from "@whiskeysockets/baileys";
+import { restoreAuthDir, queueSync, clearPersisted, persistEnabled } from "./persistAuth.js";
 
 const PORT = process.env.PORT || 10000;
 const INTERNAL_TOKEN = process.env.INTERNAL_TOKEN || "";
@@ -158,6 +159,7 @@ const stopSock = (reason = "restart") => {
 const resetAuthSession = async () => {
   stopSock("reset-auth-session");
   await rm(AUTH_DIR, { recursive: true, force: true });
+  await clearPersisted();
 };
 
 const scheduleStart = (opts = {}) => {
@@ -519,6 +521,9 @@ async function startSock({ clearAuth = false } = {}) {
   state.lastError = null;
 
   const { state: authState, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
+  // Restaurar credenciais persistidas (Supabase) ANTES de iniciar o socket
+  // só faz sentido na primeira inicialização (quando o diretório está vazio).
+  // Aqui já carregamos via useMultiFileAuthState; se vazio, restauramos e relemos.
   const { version } = await fetchLatestBaileysVersion();
   const sock = makeWASocket({
     auth: authState,
@@ -540,7 +545,10 @@ async function startSock({ clearAuth = false } = {}) {
     }
   }, 25000);
 
-  sock.ev.on("creds.update", saveCreds);
+  sock.ev.on("creds.update", async () => {
+    await saveCreds();
+    queueSync(AUTH_DIR);
+  });
   sock.ev.on("connection.update", async (update) => {
     if (seq !== startSeq) return;
     const { connection, lastDisconnect, qr } = update;
@@ -785,5 +793,9 @@ app.post("/api/whatsapp/logout", auth, async (_req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Kenia WhatsApp backend on :${PORT}`);
-  startSock().catch((e) => console.error("startSock failed", e));
+  console.log(`[persistAuth] enabled=${persistEnabled}`);
+  (async () => {
+    try { await restoreAuthDir(AUTH_DIR); } catch (e) { console.warn("restore failed", e.message); }
+    startSock().catch((e) => console.error("startSock failed", e));
+  })();
 });
