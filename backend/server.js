@@ -108,6 +108,34 @@ const createSupabaseAppointment = async (jid, payload) => {
     return null;
   }
   const phoneFromJid = String(jid || "").split("@")[0];
+  // 1) Cria o evento no Google Calendar (com Google Meet) via edge function
+  let meetingLink = null;
+  try {
+    const startsAt = new Date(`${payload.data_agendamento}T${String(payload.horario_agendamento).slice(0, 5)}:00-03:00`).toISOString();
+    const mr = await fetch(`${SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/create-meeting`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: APPT_KEY,
+        Authorization: `Bearer ${APPT_KEY}`,
+      },
+      body: JSON.stringify({
+        title: `Consulta — ${payload.area_juridica || "Atendimento jurídico"} · ${payload.nome || "Cliente"}`,
+        starts_at: startsAt,
+        duration_min: 60,
+        description: [payload.resumo_caso, payload.telefone ? `WhatsApp: ${payload.telefone}` : ""].filter(Boolean).join("\n"),
+        attendees: payload.email ? [{ email: payload.email, name: payload.nome }] : [],
+      }),
+    });
+    if (mr.ok) {
+      const mj = await mr.json();
+      meetingLink = mj?.meeting_link || null;
+    } else {
+      console.warn("create-meeting falhou:", mr.status, (await mr.text()).slice(0, 200));
+    }
+  } catch (e) {
+    console.warn("create-meeting erro:", e.message);
+  }
   const body = {
     user_id: null,
     client_name: payload.nome || "Cliente WhatsApp",
@@ -119,6 +147,7 @@ const createSupabaseAppointment = async (jid, payload) => {
     appointment_time: String(payload.horario_agendamento).slice(0, 5),
     source: "whatsapp",
     status: "scheduled",
+    meeting_link: meetingLink,
     raw_payload: { ...payload, jid, city: payload.cidade || null },
   };
   try {
@@ -138,7 +167,8 @@ const createSupabaseAppointment = async (jid, payload) => {
       return null;
     }
     console.log("agendamento criado via WhatsApp:", body.client_name, body.appointment_date, body.appointment_time);
-    return JSON.parse(raw || "[]")[0] || true;
+    const row = JSON.parse(raw || "[]")[0] || {};
+    return { ...row, meeting_link: meetingLink || row.meeting_link || null };
   } catch (e) {
     console.error("agendamento erro:", e.message);
     return null;
