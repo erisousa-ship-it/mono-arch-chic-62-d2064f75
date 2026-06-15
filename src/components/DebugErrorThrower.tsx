@@ -3,11 +3,9 @@ import { useEffect, useState } from "react";
 /**
  * DebugErrorThrower
  *
- * Componente sem UI. Escuta o evento global "lovable-debug-error" e converte
- * a mensagem em erro fatal de runtime para acionar o overlay "Try to Fix" da
- * Lovable. O throw é INTENCIONAL — não envolver em try/catch nem ErrorBoundary.
- * Deve ser montado FORA de qualquer ErrorBoundary/Suspense para escapar ao
- * overlay global da Lovable.
+ * Componente sem UI. Antes ele convertia instruções internas em erro fatal,
+ * o que derrubava a tela do app em produção/preview. Agora apenas registra a
+ * instrução para diagnóstico, sem quebrar a experiência do usuário.
  */
 export const DebugErrorThrower = () => {
   const [message, setMessage] = useState<string | null>(null);
@@ -18,6 +16,7 @@ export const DebugErrorThrower = () => {
       if (typeof detail === "string" && detail.length > 0) {
         (window as any).__lovableLastDebugInstruction = detail;
         setMessage(detail);
+        console.warn("Instrução de debug registrada sem interromper o app:", detail);
       }
     };
     window.addEventListener("lovable-debug-error", handler as EventListener);
@@ -26,8 +25,7 @@ export const DebugErrorThrower = () => {
   }, []);
 
   if (message) {
-    // Throw INTENCIONAL — aciona o overlay "Try to Fix" da Lovable.
-    throw new Error(message);
+    return null;
   }
 
   return null;
