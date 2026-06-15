@@ -64,6 +64,29 @@ function greetingNow(): "Bom dia" | "Boa tarde" | "Boa noite" {
   return "Boa noite";
 }
 
+function normalizePortuguese(value = "") {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/["“”'`´]+/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function enforceSecondPerson(reply = "") {
+  const text = String(reply || "").trim();
+  if (!text) return text;
+  const normalized = normalizePortuguese(text);
+  const startsWithLegalInfo = /^(?:eu\s+)?(?:(?:estou|to|tou)\s+precisando|preciso)\s+de\s+(?:alguma\s+)?informacao\s+juridica\b/.test(normalized);
+  const startsWithHelp = /^(?:eu\s+)?(?:(?:estou|to|tou)\s+precisando|preciso)\s+de\s+ajuda\b/.test(normalized);
+  if (startsWithLegalInfo) return "Você está precisando de alguma informação jurídica, certo?";
+  if (startsWithHelp) return "Você está precisando de ajuda, certo?";
+  return text
+    .replace(/\b(?:eu\s+)?(?:(?:estou|t[oô]u)\s+precisando|preciso)\s+de\s+(?:alguma\s+)?informa[cç][aã]o\s+jur[ií]dica\b/giu, "Você está precisando de alguma informação jurídica, certo?")
+    .replace(/\b(?:eu\s+)?(?:(?:estou|t[oô]u)\s+precisando|preciso)\s+de\s+ajuda\b/giu, "Você está precisando de ajuda, certo?");
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -157,7 +180,7 @@ Deno.serve(async (req) => {
     let payload: any = null;
     try { payload = JSON.parse(call?.function?.arguments || "{}"); } catch { payload = {}; }
 
-    const reply = payload?.response || data?.choices?.[0]?.message?.content || "Pode me contar um pouco mais sobre o que aconteceu?";
+    const reply = enforceSecondPerson(payload?.response || data?.choices?.[0]?.message?.content || "Pode me contar um pouco mais sobre o que aconteceu?");
     const analysis = return_analysis ? (payload?.analysis || null) : null;
 
     return json({
