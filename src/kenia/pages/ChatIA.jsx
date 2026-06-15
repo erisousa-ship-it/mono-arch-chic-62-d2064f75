@@ -688,14 +688,28 @@ export default function ChatIA() {
     }
   };
 
-  const openScheduler = (area) => {
-    const slot = nextBusinessSlot();
-    setScheduler({ date: slot.date, time: slot.time, duration: 60, area: area || analysis?.area || "" });
+  const openScheduler = async (area) => {
+    try {
+      const slots = await getAgendaSlots(4);
+      const slot = slots[0] || nextBusinessSlot();
+      setScheduler({ date: slot.date, time: slot.time, duration: 60, area: area || analysis?.area || "", availableSlots: slots });
+      if (slots.length) await typeAssistantMessage(buildAvailableSlotsMessage(slots));
+    } catch {
+      const slot = nextBusinessSlot();
+      setScheduler({ date: slot.date, time: slot.time, duration: 60, area: area || analysis?.area || "", availableSlots: [] });
+    }
     // No mobile, garante que o painel do chat (onde o scheduler é renderizado) fique visível
     setShowAnalysisPanel(false);
   };
 
   const createAppointment = async ({ date, time, duration = 60, area = "" }) => {
+    const slots = await getAgendaSlots(12);
+    const isAvailable = slots.some((slot) => slot.date === date && slot.time === time);
+    if (!isAvailable) {
+      const err = new Error("Horário indisponível na agenda da Dra. Kênia");
+      err.availableSlots = slots;
+      throw err;
+    }
     const starts_at = getAppointmentDateTime(date, time);
     const clientName = name?.trim() || "Cliente do chat";
     const meetUrl = getMeetLink();
