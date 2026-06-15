@@ -1137,39 +1137,41 @@ const staticPost = (url, body = {}) => {
       const styleHint = `${body.network || "instagram"} ${body.format || "post"}${body.case_type ? ` — área ${body.case_type}` : ""}${body.tone ? `, tom ${body.tone}` : ""}`;
       let b64 = "";
       let genError = null;
-      // 1) Tenta o backend configurado (Render) usando Lovable AI como gerador principal.
+      // 1) Lovable AI via Supabase edge function (LOVABLE_API_KEY nativo, sem config no Render).
       try {
-        const res = await liveRequest("post", "/generate-image", {
-          prompt: topic,
-          style: styleHint,
-          reference_image_base64: body.reference_image_base64 || null,
+        const { data, error } = await supabase.functions.invoke("generate-cover-image", {
+          body: {
+            prompt: topic,
+            style: styleHint,
+            reference_image_base64: body.reference_image_base64 || null,
+            logo_base64: body.logo_base64 || null,
+          },
         });
-        const data = res?.data || {};
-        if (data?.ok && data?.image_base64) {
-          b64 = `data:${data.mime_type || "image/png"};base64,${data.image_base64}`;
-        } else if (data?.ok && data?.image_url) {
-          b64 = data.image_url;
-        } else if (data?.error) {
-          genError = data.error;
-        }
+        if (error) throw error;
+        b64 = data?.image_data_url || data?.b64_json || "";
+        if (b64 && !b64.startsWith("data:")) b64 = `data:image/png;base64,${b64}`;
+        if (!b64 && data?.error) genError = data.error;
       } catch (e) {
-        genError = e?.response?.data?.error || e?.message || String(e);
+        genError = e?.message || String(e);
       }
-      // 2) Fallback Supabase (caso o backend native esteja indisponível)
+      // 2) Fallback: backend Render (caso a edge function falhe).
       if (!b64) {
         try {
-          const { data, error } = await supabase.functions.invoke("generate-cover-image", {
-            body: {
-              prompt: topic,
-              reference_image_base64: body.reference_image_base64 || null,
-              logo_base64: body.logo_base64 || null,
-            },
+          const res = await liveRequest("post", "/generate-image", {
+            prompt: topic,
+            style: styleHint,
+            reference_image_base64: body.reference_image_base64 || null,
           });
-          if (error) throw error;
-          b64 = data?.image_data_url || data?.b64_json || "";
-          if (!b64 && data?.error) genError = genError || data.error;
+          const data = res?.data || {};
+          if (data?.ok && data?.image_base64) {
+            b64 = `data:${data.mime_type || "image/png"};base64,${data.image_base64}`;
+          } else if (data?.ok && data?.image_url) {
+            b64 = data.image_url;
+          } else if (data?.error) {
+            genError = genError || data.error;
+          }
         } catch (e) {
-          genError = genError || e?.message || String(e);
+          genError = genError || e?.response?.data?.error || e?.message || String(e);
         }
       }
       const item = {
