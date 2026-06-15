@@ -121,8 +121,8 @@ Regras obrigatórias:
 
 - Responda sempre em português do Brasil.
 - Use linguagem humana, clara, acolhedora, objetiva e profissional.
-- Nunca confirme a necessidade do cliente em primeira pessoa. Quando reformular o que o cliente disse, converta para segunda pessoa: cliente diz "estou precisando de informação jurídica" → responda exatamente "Você está precisando de alguma informação jurídica, certo".
-- Validação final obrigatória: se a resposta gerada começar ou contiver "estou precisando de informação jurídica", substitua por exatamente "Você está precisando de alguma informação jurídica, certo" antes de enviar.
+- Nunca confirme a necessidade do cliente em primeira pessoa. Quando reformular o que o cliente disse, converta para segunda pessoa: cliente diz "estou precisando de ajuda" → responda exatamente "Você está precisando de ajuda, certo?"; cliente diz "estou precisando de informação jurídica" → responda exatamente "Você está precisando de alguma informação jurídica, certo?".
+- Validação final obrigatória: se a resposta gerada começar ou contiver "estou precisando de ajuda", "preciso de ajuda" ou "estou precisando de informação jurídica", substitua pela versão em segunda pessoa antes de enviar.
 - É proibido iniciar respostas com "estou precisando", "preciso", "quero" ou frases que pareçam ser fala do cliente. A resposta sempre deve falar SOBRE o cliente usando "você".
 - Faça uma pergunta por vez quando precisar coletar dados.
 - Evite respostas longas, frias, repetitivas ou mecânicas.
@@ -513,19 +513,26 @@ const normalizePortuguese = (value) =>
     .replace(/\s+/g, " ")
     .trim();
 
+const LEGAL_INFO_SECOND_PERSON_REPLY = "Você está precisando de alguma informação jurídica, certo?";
+const HELP_SECOND_PERSON_REPLY = "Você está precisando de ajuda, certo?";
+
 const startsWithClientFirstPersonNeed = (reply) => {
   const text = normalizePortuguese(reply);
   return /^(?:eu\s+)?(?:estou|to|tou)\s+precisando\s+de\s+(?:alguma\s+)?informacao\s+juridica\b/.test(text) ||
-    /^(?:eu\s+)?preciso\s+de\s+(?:alguma\s+)?informacao\s+juridica\b/.test(text);
+    /^(?:eu\s+)?preciso\s+de\s+(?:alguma\s+)?informacao\s+juridica\b/.test(text) ||
+    /^(?:eu\s+)?(?:estou|to|tou)\s+precisando\s+de\s+ajuda\b/.test(text) ||
+    /^(?:eu\s+)?preciso\s+de\s+ajuda\b/.test(text);
 };
 
 export const enforceSecretarySecondPerson = (reply) => {
   const text = String(reply || "").trim();
   if (!text) return text;
   if (startsWithClientFirstPersonNeed(text)) {
-    return "Você está precisando de alguma informação jurídica, certo";
+    return /informa[cç][aã]o\s+jur[ií]dica/i.test(text) ? LEGAL_INFO_SECOND_PERSON_REPLY : HELP_SECOND_PERSON_REPLY;
   }
-  return text.replace(/\b(?:eu\s+)?(?:estou\s+)?precisando\s+de\s+(?:alguma\s+)?informa[cç][aã]o\s+jur[ií]dica\b/giu, "Você está precisando de alguma informação jurídica, certo");
+  return text
+    .replace(/\b(?:eu\s+)?(?:(?:estou|t[oô]u)\s+precisando|preciso)\s+de\s+(?:alguma\s+)?informa[cç][aã]o\s+jur[ií]dica\b/giu, LEGAL_INFO_SECOND_PERSON_REPLY)
+    .replace(/\b(?:eu\s+)?(?:(?:estou|t[oô]u)\s+precisando|preciso)\s+de\s+ajuda\b/giu, HELP_SECOND_PERSON_REPLY);
 };
 
 const sanitizeAssistantReply = (reply, userMessage = "") =>
