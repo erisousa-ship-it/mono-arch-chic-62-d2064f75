@@ -91,12 +91,64 @@ const getAppointmentDateTime = (date, time) => {
 };
 
 const WEEKDAYS = ["domingo", "segunda", "terça", "quarta", "quinta", "sexta", "sábado"];
+const OFFICE_SLOTS = ["09:00", "10:00", "11:00", "14:00", "15:00", "16:00", "17:00"];
 
 const nextBusinessSlot = () => {
   const d = new Date();
   d.setDate(d.getDate() + 1);
   while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
   return { date: formatLocalDate(d), time: "10:00" };
+};
+
+const getAgendaSlots = async (limit = 4) => {
+  const { data } = await api.get("/appointments");
+  const appointments = Array.isArray(data) ? data : Array.isArray(data?.items) ? data.items : [];
+  const occupied = new Set(
+    appointments
+      .filter((item) => !/cancelad|cancelled/i.test(String(item.status || "")))
+      .map((item) => {
+        const starts = item.starts_at || (item.appointment_date && item.appointment_time
+          ? `${item.appointment_date}T${String(item.appointment_time).slice(0, 5)}`
+          : "");
+        if (!starts) return "";
+        const d = new Date(starts);
+        if (Number.isNaN(d.getTime())) return "";
+        return `${formatLocalDate(d)}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+      })
+      .filter(Boolean)
+  );
+  const now = new Date();
+  const slots = [];
+  for (let i = 0; i < 14 && slots.length < limit; i += 1) {
+    const d = new Date();
+    d.setDate(d.getDate() + i);
+    d.setHours(12, 0, 0, 0);
+    if (d.getDay() === 0 || d.getDay() === 6) continue;
+    const date = formatLocalDate(d);
+    for (const time of OFFICE_SLOTS) {
+      const candidate = new Date(`${date}T${time}:00`);
+      if (candidate <= now) continue;
+      if (occupied.has(`${date}T${time}`)) continue;
+      slots.push({ date, time, weekday: WEEKDAYS[candidate.getDay()] });
+      if (slots.length >= limit) break;
+    }
+  }
+  return slots;
+};
+
+const formatSlot = (slot) => {
+  const d = new Date(`${slot.date}T${slot.time}:00`);
+  return `${slot.weekday || WEEKDAYS[d.getDay()]}, ${d.toLocaleDateString("pt-BR")} às ${slot.time}`;
+};
+
+const buildScheduleContext = (slots = []) => {
+  if (!slots.length) return "AGENDA DA DRA. KÊNIA: sem horários livres próximos confirmados pelo painel.";
+  return `AGENDA REAL DA DRA. KÊNIA — ofereça somente estes horários livres: ${slots.map(formatSlot).join("; ")}.`;
+};
+
+const buildAvailableSlotsMessage = (slots = []) => {
+  if (!slots.length) return "No momento não localizei horários livres próximos na agenda. Posso tentar verificar novamente em instantes.";
+  return `Consultei a agenda da Dra. Kênia e tenho estes horários livres: ${slots.slice(0, 3).map(formatSlot).join("; ")}. Qual fica melhor para você?`;
 };
 
 const extractScheduleIntent = (text) => {
@@ -636,14 +688,28 @@ export default function ChatIA() {
     }
   };
 
-  const openScheduler = (area) => {
-    const slot = nextBusinessSlot();
-    setScheduler({ date: slot.date, time: slot.time, duration: 60, area: area || analysis?.area || "" });
+  const openScheduler = async (area) => {
+    try {
+      const slots = await getAgendaSlots(4);
+      const slot = slots[0] || nextBusinessSlot();
+      setScheduler({ date: slot.date, time: slot.time, duration: 60, area: area || analysis?.area || "", availableSlots: slots });
+      if (slots.length) await typeAssistantMessage(buildAvailableSlotsMessage(slots));
+    } catch {
+      const slot = nextBusinessSlot();
+      setScheduler({ date: slot.date, time: slot.time, duration: 60, area: area || analysis?.area || "", availableSlots: [] });
+    }
     // No mobile, garante que o painel do chat (onde o scheduler é renderizado) fique visível
     setShowAnalysisPanel(false);
   };
 
   const createAppointment = async ({ date, time, duration = 60, area = "" }) => {
+    const slots = await getAgendaSlots(12);
+    const isAvailable = slots.some((slot) => slot.date === date && slot.time === time);
+    if (!isAvailable) {
+      const err = new Error("Horário indisponível na agenda da Dra. Kênia");
+      err.availableSlots = slots;
+      throw err;
+    }
     const starts_at = getAppointmentDateTime(date, time);
     const clientName = name?.trim() || "Cliente do chat";
     const meetUrl = getMeetLink();
@@ -698,7 +764,11 @@ export default function ChatIA() {
       await typeAssistantMessage(buildAppointmentMessage(result));
     } catch (err) {
       console.error("Erro ao criar agendamento:", err);
-      toast.error("Não consegui agendar. Tente novamente.");
+      const slots = err?.availableSlots?.length ? err.availableSlots : await getAgendaSlots(4).catch(() => []);
+      const slot = slots[0];
+      if (slot) setScheduler((current) => ({ ...(current || {}), date: slot.date, time: slot.time, availableSlots: slots }));
+      await typeAssistantMessage(`Esse horário não está livre na agenda. ${buildAvailableSlotsMessage(slots)}`);
+      toast.error("Horário indisponível na agenda");
     } finally {
       setScheduling(false);
     }
@@ -810,22 +880,31 @@ export default function ChatIA() {
         await typeAssistantMessage(buildAppointmentMessage(result));
       } catch (err) {
         console.error("Erro ao agendar automaticamente:", err);
+        const slots = err?.availableSlots?.length ? err.availableSlots : await getAgendaSlots(4).catch(() => []);
+        const slot = slots[0] || nextBusinessSlot();
+        setScheduler({ date: slot.date, time: slot.time, duration: 60, area: analysis?.area || "Atendimento jurídico", availableSlots: slots });
         setThinking(false);
-        await typeAssistantMessage(
-          "Não consegui salvar automaticamente agora. Abra o botão Agendar consulta e confirme o horário manualmente."
-        );
-        openScheduler(analysis?.area || "Atendimento jurídico");
-        toast.error("Não consegui criar o agendamento automaticamente");
+        await typeAssistantMessage(`Esse horário não aparece livre na agenda da Dra. Kênia. ${buildAvailableSlotsMessage(slots)}`);
+        setShowAnalysisPanel(false);
+        toast.error("Horário indisponível na agenda");
       }
       sendingRef.current = false;
       return;
     }
+    if (SCHEDULE_REGEX.test(msg)) {
+      setThinking(false);
+      await openScheduler(analysis?.area || "Atendimento jurídico");
+      sendingRef.current = false;
+      return;
+    }
     try {
+      const agendaSlots = await getAgendaSlots(4).catch(() => []);
       const { data } = await api.post(
         "/chat/message",
         {
           message: msg,
           history: dedupeChatMessages(messagesRef.current).map((m) => ({ role: m.role, content: m.content })),
+          schedule_context: buildScheduleContext(agendaSlots),
           session_id: sessionId,
           visitor_name: name || null,
           visitor_phone: phone || null,
@@ -1106,6 +1185,22 @@ export default function ChatIA() {
                       <X className="w-4 h-4" />
                     </button>
                   </div>
+                  {scheduler.availableSlots?.length > 0 && (
+                    <div className="mb-3 flex flex-wrap gap-2">
+                      {scheduler.availableSlots.slice(0, 4).map((slot) => (
+                        <Button
+                          key={`${slot.date}-${slot.time}`}
+                          type="button"
+                          variant={scheduler.date === slot.date && scheduler.time === slot.time ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setScheduler({ ...scheduler, date: slot.date, time: slot.time })}
+                          className="h-8 text-xs"
+                        >
+                          {formatSlot(slot)}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <div>
                       <label className="text-[11px] uppercase tracking-wider text-nude-600">Data</label>
