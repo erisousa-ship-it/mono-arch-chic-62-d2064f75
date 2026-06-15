@@ -518,8 +518,12 @@ async function handleIncomingMessage(msg) {
     if (agendamento) {
       const created = await createSupabaseAppointment(jid, agendamento);
       if (created) {
+        const link = created.meeting_link;
         if (!/agendad|confirmad|marcad/i.test(reply)) {
           reply = `${reply}\n\n✅ Sua consulta foi registrada no painel da Dra. Kênia.`.trim();
+        }
+        if (link && !reply.includes(link)) {
+          reply = `${reply}\n\n🔗 Link da videochamada (Google Meet): ${link}`.trim();
         }
       } else {
         reply = `${reply}\n\nAnotei seus dados; a Dra. Kênia confirmará o horário em breve.`.trim();
