@@ -263,7 +263,20 @@ async function handleIncomingMessage(msg) {
 
   try {
     await state.sock?.sendPresenceUpdate?.("composing", jid);
-    const reply = await generateAiReply(jid, text);
+    const rawReply = await generateAiReply(jid, text);
+    const agendamento = parseAgendamentoBlock(rawReply);
+    let reply = stripAgendamentoBlock(rawReply);
+    if (agendamento) {
+      const created = await createSupabaseAppointment(jid, agendamento);
+      if (created) {
+        if (!/agendad|confirmad|marcad/i.test(reply)) {
+          reply = `${reply}\n\n✅ Sua consulta foi registrada no painel da Dra. Kênia.`.trim();
+        }
+      } else {
+        reply = `${reply}\n\nAnotei seus dados; a Dra. Kênia confirmará o horário em breve.`.trim();
+      }
+    }
+    if (!reply) reply = "Pode me confirmar essa informação, por favor?";
     await state.sock?.sendMessage(jid, { text: reply }, { quoted: msg });
     state.lastAutoReplyAt = Date.now();
     state.autoReplyCount += 1;
