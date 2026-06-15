@@ -194,6 +194,85 @@ const rememberMessage = (jid, role, content) => {
   return conversationHistory.get(jid);
 };
 
+const maskKey = (key = "") => key ? `${key.slice(0, 6)}...${key.slice(-4)}` : "Emergent padrão";
+
+const getSaoPauloNow = () => {
+  const now = new Date();
+  const parts = new Intl.DateTimeFormat("pt-BR", {
+    timeZone: "America/Sao_Paulo",
+    weekday: "long",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(now).reduce((acc, part) => ({ ...acc, [part.type]: part.value }), {});
+  return {
+    iso: now.toISOString(),
+    br: `${parts.weekday}, ${parts.day}/${parts.month}/${parts.year} às ${parts.hour}:${parts.minute}`,
+    date: `${parts.year}-${parts.month}-${parts.day}`,
+    time: `${parts.hour}:${parts.minute}`,
+  };
+};
+
+const buildTemporalSystemContext = () => {
+  const now = getSaoPauloNow();
+  return `CONTEXTO TEMPORAL OBRIGATÓRIO: agora em Brasília/America/Sao_Paulo é ${now.br} (data ISO ${now.date}, hora ${now.time}). Use esta data para responder perguntas de data/hora e para converter termos como hoje/amanhã/segunda em agendamentos futuros.`;
+};
+
+const parseImagePayload = (data = {}) => {
+  const item = data?.data?.[0] || {};
+  const b64 = item.b64_json || data.image_base64 || data.b64_json;
+  const url = item.url || data.image_url || data.url;
+  if (b64) return { image_base64: String(b64).replace(/^data:image\/[^;]+;base64,/, ""), mime_type: data.mime_type || "image/png" };
+  if (url) return { image_url: url, mime_type: data.mime_type || "image/png" };
+  return null;
+};
+
+const callEmergentImage = async ({ prompt, style = "", reference_image_base64 = null, key = "" }) => {
+  const apiKey = key || state.settings.llm_image_key || EMERGENT_API_KEY;
+  if (!apiKey) throw new Error("EMERGENT_API_KEY não configurada");
+  const finalPrompt = [
+    "Crie um criativo jurídico profissional para a Dra. Kênia Garcia, sem texto e sem letras dentro da imagem.",
+    style ? `Formato/estilo: ${style}.` : "",
+    `Tema: ${prompt}`,
+  ].filter(Boolean).join("\n");
+  const body = {
+    model: EMERGENT_IMAGE_MODEL,
+    prompt: finalPrompt,
+    size: "1024x1024",
+    n: 1,
+    ...(reference_image_base64 ? { image: reference_image_base64 } : {}),
+  };
+  const r = await fetch(`${EMERGENT_BASE_URL}/images/generations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify(body),
+  });
+  const raw = await r.text();
+  if (!r.ok) throw new Error(`emergent_image_${r.status}: ${raw.slice(0, 500)}`);
+  const parsed = parseImagePayload(JSON.parse(raw || "{}"));
+  if (!parsed) throw new Error("emergent_image_empty_response");
+  return parsed;
+};
+
+const callEmergentChat = async ({ messages, key = "" }) => {
+  const apiKey = key || state.settings.llm_text_key || EMERGENT_API_KEY;
+  if (!apiKey) throw new Error("EMERGENT_API_KEY não configurada");
+  const r = await fetch(`${EMERGENT_BASE_URL}/chat/completions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ model: EMERGENT_TEXT_MODEL, messages }),
+  });
+  const raw = await r.text();
+  if (!r.ok) throw new Error(`emergent_chat_${r.status}: ${raw.slice(0, 500)}`);
+  const data = JSON.parse(raw || "{}");
+  const text = String(data?.choices?.[0]?.message?.content || "").trim();
+  if (!text) throw new Error("emergent_chat_empty_response");
+  return text;
+};
+
 async function generateDirectOllamaReply(messages) {
   if (!OLLAMA_BASE_URL) throw new Error("OLLAMA_BASE_URL não configurado no backend WhatsApp");
   const controller = new AbortController();
