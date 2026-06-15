@@ -447,20 +447,7 @@ export const enforceSecretarySecondPerson = (reply) => {
   if (startsWithClientFirstPersonNeed(text)) {
     return "Você está precisando de alguma informação jurídica, certo";
   }
-  return text
-    .replace(/\b(?:eu\s+)?(?:estou|t[oô]|tou)\s+precisando\s+de\s+(?:alguma\s+)?informa[cç][aã]o\s+jur[ií]dica\b/giu, "Você está precisando de alguma informação jurídica, certo")
-    .replace(/\b(?:eu\s+)?preciso\s+de\s+(?:alguma\s+)?informa[cç][aã]o\s+jur[ií]dica\b/giu, "Você está precisando de alguma informação jurídica, certo")
-    .replace(/\b(?:eu\s+)?(?:estou|t[oô]|tou)\s+precisando\s+de\s+mais\s+(?:alguma\s+)?informa[cç][oõ]es\??/giu, "Você deseja acrescentar mais alguma informação?")
-    .replace(/\b(?:eu\s+)?(?:estou|t[oô]|tou)\s+precisando\s+de\s+(?:mais\s+)?(?:alguma\s+)?informa[cç][aã]o\??/giu, "Você deseja acrescentar mais alguma informação?")
-    .replace(/\b(?:eu\s+)?preciso\s+de\s+(?:mais\s+)?informa[cç][oõ]es\.?/giu, "Você gostaria de fornecer mais alguma informação?")
-    .replace(/\b(?:eu\s+)?preciso\s+de\s+(?:mais\s+)?dados\.?/giu, "Você pode enviar mais dados para continuar?")
-    .replace(/\b(?:eu\s+)?preciso\s+que\s+(?:voc[eê]\s+)?(?:me\s+)?envie\s+mais\s+detalhes\.?/giu, "Você pode enviar mais detalhes para continuar?")
-    .replace(/\b(?:eu\s+)?(?:estou|t[oô]|tou)\s+aguardando\s+(?:a\s+)?sua\s+resposta\.?/giu, "Quando você enviar as informações, o processo continuará automaticamente.")
-    .replace(/\b(?:eu\s+)?(?:estou|t[oô]|tou)\s+aguardando\s+mais\s+informa[cç][oõ]es\.?/giu, "Você gostaria de fornecer mais alguma informação?")
-    .replace(/\b(?:a\s+)?(?:assistente|ia|i\.a\.|rob[oô]|sistema)\s+(?:precisa|aguarda|est[aá]\s+aguardando)\s+(?:de\s+)?(?:mais\s+)?(?:dados|informa[cç][oõ]es|sua\s+resposta)\.?/giu, "Quando você enviar as informações, o processo continuará automaticamente.")
-    .replace(/\b(?:como\s+)?(?:assistente|ia|i\.a\.|rob[oô]|sistema)\b\s*,?\s*/giu, "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
+  return text.replace(/\b(?:eu\s+)?(?:estou\s+)?precisando\s+de\s+(?:alguma\s+)?informa[cç][aã]o\s+jur[ií]dica\b/giu, "Você está precisando de alguma informação jurídica, certo");
 };
 
 const sanitizeAssistantReply = (reply, userMessage = "") =>
@@ -814,24 +801,12 @@ const response = (data, status = 200, headers = {}) => Promise.resolve({ data: c
 const sanitizeWhatsAppTextPayload = (payload) => {
   if (Array.isArray(payload)) return payload.map(sanitizeWhatsAppTextPayload);
   if (!payload || typeof payload !== "object") return payload;
-  const textKeys = ["text", "last_message", "response", "content", "body", "caption"];
-  const sanitized = { ...payload };
-  for (const key of textKeys) {
-    if (typeof sanitized[key] === "string") sanitized[key] = enforceSecretarySecondPerson(sanitized[key]);
-  }
-  if (Array.isArray(sanitized.messages)) sanitized.messages = sanitizeWhatsAppTextPayload(sanitized.messages);
-  if (sanitized.message && typeof sanitized.message === "object") sanitized.message = sanitizeWhatsAppTextPayload(sanitized.message);
-  if (typeof sanitized.message === "string") sanitized.message = enforceSecretarySecondPerson(sanitized.message);
-  return sanitized;
-};
-
-const sanitizeTextBody = (body = {}) => {
-  if (!body || typeof body !== "object") return body;
   return {
-    ...body,
-    ...(typeof body.text === "string" ? { text: enforceSecretarySecondPerson(body.text) } : {}),
-    ...(typeof body.message === "string" ? { message: enforceSecretarySecondPerson(body.message) } : {}),
-    ...(typeof body.response === "string" ? { response: enforceSecretarySecondPerson(body.response) } : {}),
+    ...payload,
+    ...(typeof payload.text === "string" ? { text: enforceSecretarySecondPerson(payload.text) } : {}),
+    ...(typeof payload.last_message === "string" ? { last_message: enforceSecretarySecondPerson(payload.last_message) } : {}),
+    ...(typeof payload.response === "string" ? { response: enforceSecretarySecondPerson(payload.response) } : {}),
+    ...(payload.message && typeof payload.message === "object" ? { message: sanitizeWhatsAppTextPayload(payload.message) } : {}),
   };
 };
 const nextId = (prefix) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -977,10 +952,9 @@ const staticPost = (url, body = {}) => {
     return response(lead, 201);
   }
   if (path === "/whatsapp/send") {
-    const cleanBody = sanitizeTextBody(body);
     const messages = read("messages", seedMessages);
-    const msg = { id: nextId("msg"), text: cleanBody.text, from_me: true, created_at: nowIso() };
-    messages[cleanBody.contact_id] = [...(messages[cleanBody.contact_id] || []), msg];
+    const msg = { id: nextId("msg"), text: body.text, from_me: true, created_at: nowIso() };
+    messages[body.contact_id] = [...(messages[body.contact_id] || []), msg];
     write("messages", messages);
     return response({ message: msg, provider_result: { static: true } });
   }
@@ -1026,7 +1000,7 @@ const staticPost = (url, body = {}) => {
               : cloudReply;
             return response({
               session_id: data?.session_id || sessionId,
-              response: enforceSecretarySecondPerson(responseText),
+              response: responseText,
               audio_base64: data?.audio_base64 || null,
               appointment: data?.appointment || null,
               handoff: data?.handoff || false,
@@ -1131,7 +1105,7 @@ const staticPost = (url, body = {}) => {
           : cleanInternalChatMarkers(finalText);
         return response({
             session_id: sessionId,
-            response: enforceSecretarySecondPerson(responseText),
+            response: responseText,
             audio_base64: null,
             appointment: null,
             handoff: false,
@@ -1144,7 +1118,7 @@ const staticPost = (url, body = {}) => {
       }
       return response({
           session_id: sessionId,
-          response: enforceSecretarySecondPerson(fallbackReply),
+          response: fallbackReply,
           audio_base64: null,
           analysis: { acertividade: 40, qualificacao: "fallback" },
         });
@@ -1474,7 +1448,7 @@ export const api = HAS_BACKEND
         if (path.startsWith("/legal-deadlines/")) return staticPost(url, body);
         if (cloudFirstPostPaths.has(path)) return staticPost(url, body);
         if (path === "/chat/message") return staticPost(url, body);
-        if (path === "/whatsapp/send") return liveRequest("post", url, sanitizeTextBody(body), config).then((res) => ({ ...res, data: sanitizeWhatsAppTextPayload(res?.data) })).catch(() => staticPost(url, body));
+        if (path === "/whatsapp/send") return liveRequest("post", url, body, config).then((res) => ({ ...res, data: sanitizeWhatsAppTextPayload(res?.data) })).catch(() => staticPost(url, body));
         if (liveFirstWithStaticFallbackPostPaths.has(path)) {
           return liveRequest("post", url, body, config).catch(() => staticPost(url, body));
         }
@@ -1507,7 +1481,7 @@ export const api = HAS_BACKEND
       post: (url, body, config) => {
         const [path] = String(url).split("?");
         if (hasBackend() && (path.startsWith("/whatsapp/") || fallbackToStaticPostPaths.has(path))) {
-          return liveRequest("post", url, path === "/whatsapp/send" ? sanitizeTextBody(body) : body, config).then((res) => ({ ...res, data: sanitizeWhatsAppTextPayload(res?.data) })).catch(() => staticPost(url, body));
+          return liveRequest("post", url, body, config).then((res) => ({ ...res, data: sanitizeWhatsAppTextPayload(res?.data) })).catch(() => staticPost(url, body));
         }
         return staticPost(url, body);
       },

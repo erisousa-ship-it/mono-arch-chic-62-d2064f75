@@ -18,8 +18,8 @@ import { supabase } from "@/integrations/supabase/client";
 
 const SCHEDULE_REGEX = /\b(agendar|agendamento|marcar|marca[cç][aã]o|hor[aá]rio|consulta|reuni[aã]o|atendimento|appointment|schedule)\b/i;
 const WAIT_FOLLOW_UP_MS = 65000;
-const ASSISTANT_GREETING = "Olá! Atendimento da Dra. Kênia Garcia. Como você pode receber ajuda hoje?";
-const ASSISTANT_SPEAKER = "Secretária";
+const ASSISTANT_GREETING = "Tudo bem? Sou a assistente virtual da Dra. Kênia Garcia. Como posso ajudar você hoje?";
+const ASSISTANT_SPEAKER = "Assistente virtual";
 
 // Gera link de videoconferência (Jitsi — funciona como Google Meet, sem necessidade de login)
 // Pode ser substituído por integração oficial com Google Calendar API no futuro.
@@ -78,7 +78,7 @@ const shouldScheduleWaitFollowUp = (text) =>
 
 const buildWaitFollowUpText = (name) => {
   const firstName = String(name || "").trim().split(/\s+/)[0] || "cliente";
-  return `${firstName}, seu caso segue em verificação. Você receberá o retorno assim que a conferência terminar. Obrigada por aguardar. 🙏`;
+  return `${firstName}, ainda estou verificando por aqui e já te retorno. Obrigada por aguardar. 🙏`;
 };
 
 const pad2 = (n) => String(n).padStart(2, "0");
