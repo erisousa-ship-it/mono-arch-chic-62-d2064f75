@@ -67,6 +67,23 @@ REGRAS FINAIS:
 - Nunca invente preço fechado: diga que o especialista trará proposta personalizada.
 - Se o cliente desviar, traga ele de volta com gentileza para a próxima etapa.`;
 
+const enforceClientCenteredReply = (value: unknown) => {
+  const text = String(value ?? "").trim();
+  if (!text) return text;
+  return text
+    .replace(/\b(?:eu\s+)?(?:estou|t[oô]|tou)\s+precisando\s+de\s+mais\s+(?:alguma\s+)?informa[cç][oõ]es\??/giu, "Você deseja acrescentar mais alguma informação?")
+    .replace(/\b(?:eu\s+)?(?:estou|t[oô]|tou)\s+precisando\s+de\s+(?:mais\s+)?(?:alguma\s+)?informa[cç][aã]o\??/giu, "Você deseja acrescentar mais alguma informação?")
+    .replace(/\b(?:eu\s+)?preciso\s+de\s+(?:mais\s+)?informa[cç][oõ]es\.?/giu, "Você gostaria de fornecer mais alguma informação?")
+    .replace(/\b(?:eu\s+)?preciso\s+de\s+(?:mais\s+)?dados\.?/giu, "Você pode enviar mais dados para continuar?")
+    .replace(/\b(?:eu\s+)?preciso\s+que\s+(?:voc[eê]\s+)?(?:me\s+)?envie\s+mais\s+detalhes\.?/giu, "Você pode enviar mais detalhes para continuar?")
+    .replace(/\b(?:eu\s+)?(?:estou|t[oô]|tou)\s+aguardando\s+(?:a\s+)?sua\s+resposta\.?/giu, "Quando você enviar as informações, o processo continuará automaticamente.")
+    .replace(/\b(?:eu\s+)?(?:estou|t[oô]|tou)\s+aguardando\s+mais\s+informa[cç][oõ]es\.?/giu, "Você gostaria de fornecer mais alguma informação?")
+    .replace(/\b(?:a\s+)?(?:assistente|ia|i\.a\.|rob[oô]|sistema)\s+(?:precisa|aguarda|est[aá]\s+aguardando)\s+(?:de\s+)?(?:mais\s+)?(?:dados|informa[cç][oõ]es|sua\s+resposta)\.?/giu, "Quando você enviar as informações, o processo continuará automaticamente.")
+    .replace(/\b(?:como\s+)?(?:assistente|ia|i\.a\.|rob[oô]|sistema)\b\s*,?\s*/giu, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+};
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -106,7 +123,7 @@ Deno.serve(async (req) => {
     }
 
     const data = await resp.json();
-    const reply = data?.choices?.[0]?.message?.content ?? "Desculpe, não consegui responder agora.";
+    const reply = enforceClientCenteredReply(data?.choices?.[0]?.message?.content ?? "Você pode tentar novamente em instantes?");
     return new Response(JSON.stringify({ reply }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
