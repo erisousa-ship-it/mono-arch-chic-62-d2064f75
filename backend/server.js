@@ -22,7 +22,23 @@ const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen2.5:3b-instruct";
 const DEFAULT_BOT_PROMPT = `Você é a secretária jurídica da Dra. Kênia Garcia atendendo pelo WhatsApp.
 Responda sempre em português do Brasil, com tom humano, acolhedor, profissional e objetivo.
 Nunca diga que é IA, robô, chatbot ou modelo. Não use markdown extenso nem HTML.
-Faça uma pergunta por vez, mantenha continuidade pelo histórico e encaminhe para agendamento quando fizer sentido.`;
+Faça uma pergunta por vez, mantenha continuidade pelo histórico e encaminhe para agendamento quando fizer sentido.
+
+# ÁREAS DE ATUAÇÃO DA DRA. KÊNIA GARCIA
+- Direito de Família e Sucessões: divórcio consensual/litigioso, inventário e partilha, pensão alimentícia, planejamento sucessório (testamento, doação, holding familiar), guarda e visitas, união estável.
+- Direito Bancário: revisão de contratos, fraudes bancárias, negativação indevida, superendividamento (Lei 14.181/21), repetição de indébito.
+- Direito Previdenciário: aposentadorias (idade, tempo, especial, invalidez), auxílio-doença, BPC/LOAS, pensão por morte, revisão de benefícios, planejamento previdenciário.
+- Atende também outras áreas correlatas — se o cliente perguntar sobre tema fora dessas listas, ofereça encaminhar para análise direta com a Dra. Kênia.
+- Honorários: definidos após análise individual do caso; ofereça consulta inicial.
+- Fontes jurídicas confiáveis para apoiar respostas: planalto.gov.br, jusbrasil.com.br, STF, STJ, CNJ. Nunca invente leis, súmulas ou números de processo.
+
+# AGENDAMENTO DE CONSULTA (REGRA CRÍTICA)
+Quando o cliente quiser marcar consulta/reunião, colete em ordem (uma pergunta por vez): nome completo, telefone, e-mail (se tiver), cidade, área jurídica do caso, breve resumo, data desejada (dd/mm/aaaa) e horário (HH:MM).
+Ao ter os dados essenciais (nome, data, hora), CONFIRME em texto natural (ex.: "Confirmado: 17/06/2026 às 14:00") e na MESMA mensagem inclua, ao final, EXATAMENTE este bloco — sem markdown, sem crases, sem alterar as tags:
+<AGENDAMENTO>
+{"nome":"...","telefone":"...","email":"...","cidade":"...","area_juridica":"...","resumo_caso":"...","data_agendamento":"YYYY-MM-DD","horario_agendamento":"HH:MM"}
+</AGENDAMENTO>
+O bloco é interno e será removido antes de chegar ao cliente; ele registra automaticamente a consulta no painel da Dra. Kênia. Sem esse bloco, o agendamento NÃO é registrado.`;
 
 const app = express();
 app.use(cors({ origin: true }));
@@ -49,6 +65,68 @@ let reconnectTimer = null;
 let qrWatchdogTimer = null;
 const processedMessages = new Set();
 const conversationHistory = new Map();
+
+// ============ Agendamento via Supabase ============
+const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const APPT_KEY = SUPABASE_SERVICE_KEY || SUPABASE_ANON_KEY;
+
+const stripAgendamentoBlock = (text = "") =>
+  text.replace(/<AGENDAMENTO>[\s\S]*?<\/AGENDAMENTO>/gi, "").replace(/\n{3,}/g, "\n\n").trim();
+
+const parseAgendamentoBlock = (text = "") => {
+  const m = text.match(/<AGENDAMENTO>\s*([\s\S]*?)\s*<\/AGENDAMENTO>/i);
+  if (!m) return null;
+  try {
+    const json = JSON.parse(m[1].trim());
+    if (!json.data_agendamento || !json.horario_agendamento) return null;
+    return json;
+  } catch {
+    return null;
+  }
+};
+
+const createSupabaseAppointment = async (jid, payload) => {
+  if (!SUPABASE_URL || !APPT_KEY) {
+    console.warn("agendamento: SUPABASE_URL/KEY ausente — pulei criação");
+    return null;
+  }
+  const phoneFromJid = String(jid || "").split("@")[0];
+  const body = {
+    user_id: null,
+    client_name: payload.nome || "Cliente WhatsApp",
+    phone: payload.telefone || phoneFromJid || null,
+    email: payload.email || null,
+    legal_area: payload.area_juridica || "Atendimento jurídico",
+    case_summary: payload.resumo_caso || null,
+    appointment_date: payload.data_agendamento,
+    appointment_time: String(payload.horario_agendamento).slice(0, 5),
+    source: "whatsapp",
+    status: "scheduled",
+    raw_payload: { ...payload, jid, city: payload.cidade || null },
+  };
+  try {
+    const r = await fetch(`${SUPABASE_URL.replace(/\/+$/, "")}/rest/v1/appointments`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: APPT_KEY,
+        Authorization: `Bearer ${APPT_KEY}`,
+        Prefer: "return=representation",
+      },
+      body: JSON.stringify(body),
+    });
+    const raw = await r.text();
+    if (!r.ok) {
+      console.error("agendamento falhou:", r.status, raw.slice(0, 300));
+      return null;
+    }
+    console.log("agendamento criado via WhatsApp:", body.client_name, body.appointment_date, body.appointment_time);
+    return JSON.parse(raw || "[]")[0] || true;
+  } catch (e) {
+    console.error("agendamento erro:", e.message);
+    return null;
+  }
+};
 
 const connectionState = () => {
   if (state.connected) return "open";
@@ -185,7 +263,20 @@ async function handleIncomingMessage(msg) {
 
   try {
     await state.sock?.sendPresenceUpdate?.("composing", jid);
-    const reply = await generateAiReply(jid, text);
+    const rawReply = await generateAiReply(jid, text);
+    const agendamento = parseAgendamentoBlock(rawReply);
+    let reply = stripAgendamentoBlock(rawReply);
+    if (agendamento) {
+      const created = await createSupabaseAppointment(jid, agendamento);
+      if (created) {
+        if (!/agendad|confirmad|marcad/i.test(reply)) {
+          reply = `${reply}\n\n✅ Sua consulta foi registrada no painel da Dra. Kênia.`.trim();
+        }
+      } else {
+        reply = `${reply}\n\nAnotei seus dados; a Dra. Kênia confirmará o horário em breve.`.trim();
+      }
+    }
+    if (!reply) reply = "Pode me confirmar essa informação, por favor?";
     await state.sock?.sendMessage(jid, { text: reply }, { quoted: msg });
     state.lastAutoReplyAt = Date.now();
     state.autoReplyCount += 1;
