@@ -282,6 +282,11 @@ async function startSock({ clearAuth = false, reason = "manual" } = {}) {
     logger,
     printQRInTerminal: false,
     browser: ["Kenia", "Chrome", "1.0"],
+    connectTimeoutMs: 60000,
+    defaultQueryTimeoutMs: 60000,
+    keepAliveIntervalMs: 25000,
+    markOnlineOnConnect: false,
+    syncFullHistory: false,
   });
 
   qrWatchdogTimer = setTimeout(() => {
