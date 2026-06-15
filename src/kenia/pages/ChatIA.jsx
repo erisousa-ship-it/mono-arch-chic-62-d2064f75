@@ -100,6 +100,19 @@ const nextBusinessSlot = () => {
   return { date: formatLocalDate(d), time: "10:00" };
 };
 
+// Extrai bloco <AGENDAMENTO>{...}</AGENDAMENTO> emitido pela IA
+const parseAgendamentoBlock = (text) => {
+  const m = String(text || "").match(/<AGENDAMENTO>\s*([\s\S]*?)\s*<\/AGENDAMENTO>/i);
+  if (!m) return null;
+  try {
+    const obj = JSON.parse(m[1]);
+    if (!obj?.data_agendamento || !obj?.horario_agendamento) return null;
+    return obj;
+  } catch {
+    return null;
+  }
+};
+
 const extractScheduleIntent = (text) => {
   const lower = text.toLowerCase();
   if (!SCHEDULE_REGEX.test(lower)) return null;
