@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
           method: "POST",
           headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
           body: JSON.stringify({
-            model: "google/gemini-2.5-flash-image-preview",
+            model: "openai/gpt-image-2",
             prompt: userText,
             quality: "low",
             size: "1024x1024",
@@ -67,7 +67,7 @@ Deno.serve(async (req) => {
           const dataUrl = parseImageResponse(data);
           if (dataUrl) {
             const b64Only = dataUrl.startsWith("data:") ? dataUrl.split(",")[1] : dataUrl;
-            return new Response(JSON.stringify({ image_data_url: dataUrl, b64_json: b64Only, provider: "lovable" }), {
+            return new Response(JSON.stringify({ image_data_url: dataUrl, b64_json: b64Only, provider: "lovable", model: "openai/gpt-image-2" }), {
               headers: { ...corsHeaders, "Content-Type": "application/json" },
             });
           }
