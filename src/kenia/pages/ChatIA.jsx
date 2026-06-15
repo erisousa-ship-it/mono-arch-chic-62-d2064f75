@@ -59,6 +59,7 @@ const cleanRepeatedText = (text) => {
   const noRepeatedWords = String(text || "")
     .replace(/<?\/?\s*HANDOFF[_\s-]*K[EÊ]NIA\s*\/?>?/giu, "")
     .replace(/`{1,3}\s*HANDOFF[_\s-]*K[EÊ]NIA\s*`{1,3}/giu, "")
+    .replace(/<AGENDAMENTO>[\s\S]*?<\/AGENDAMENTO>/gi, "")
     .replace(/\b((?:[\p{L}\p{N}]{2,}\s+){1,3}[\p{L}\p{N}]{2,})(?:[\s,.;:!?-]+\1\b)+/giu, "$1")
     .replace(/\b([\p{L}\p{N}]{2,})(?:[\s,.;:!?-]+\1\b)+/giu, "$1")
     .replace(/([^.!?\n]{8,}[.!?])(?:\s+\1)+/giu, "$1")
