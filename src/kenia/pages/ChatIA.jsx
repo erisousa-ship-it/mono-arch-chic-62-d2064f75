@@ -59,6 +59,7 @@ const cleanRepeatedText = (text) => {
   const noRepeatedWords = String(text || "")
     .replace(/<?\/?\s*HANDOFF[_\s-]*K[EÊ]NIA\s*\/?>?/giu, "")
     .replace(/`{1,3}\s*HANDOFF[_\s-]*K[EÊ]NIA\s*`{1,3}/giu, "")
+    .replace(/<AGENDAMENTO>[\s\S]*?<\/AGENDAMENTO>/gi, "")
     .replace(/\b((?:[\p{L}\p{N}]{2,}\s+){1,3}[\p{L}\p{N}]{2,})(?:[\s,.;:!?-]+\1\b)+/giu, "$1")
     .replace(/\b([\p{L}\p{N}]{2,})(?:[\s,.;:!?-]+\1\b)+/giu, "$1")
     .replace(/([^.!?\n]{8,}[.!?])(?:\s+\1)+/giu, "$1")
@@ -97,6 +98,19 @@ const nextBusinessSlot = () => {
   d.setDate(d.getDate() + 1);
   while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
   return { date: formatLocalDate(d), time: "10:00" };
+};
+
+// Extrai bloco <AGENDAMENTO>{...}</AGENDAMENTO> emitido pela IA
+const parseAgendamentoBlock = (text) => {
+  const m = String(text || "").match(/<AGENDAMENTO>\s*([\s\S]*?)\s*<\/AGENDAMENTO>/i);
+  if (!m) return null;
+  try {
+    const obj = JSON.parse(m[1]);
+    if (!obj?.data_agendamento || !obj?.horario_agendamento) return null;
+    return obj;
+  } catch {
+    return null;
+  }
 };
 
 const extractScheduleIntent = (text) => {
@@ -821,7 +835,7 @@ export default function ChatIA() {
       return;
     }
     try {
-      const { data } = await api.post(
+      let { data } = await api.post(
         "/chat/message",
         {
           message: msg,
@@ -839,6 +853,25 @@ export default function ChatIA() {
       setSessionId(data.session_id);
       if (data.appointment) {
         toast.success("Consulta salva automaticamente na Agenda");
+      }
+      // Fallback: parse <AGENDAMENTO> block returned in response text
+      const agBlock = parseAgendamentoBlock(data.response);
+      if (agBlock && !data.appointment) {
+        try {
+          const result = await createAppointment({
+            date: agBlock.data_agendamento,
+            time: agBlock.horario_agendamento,
+            duration: 60,
+            area: agBlock.area_juridica || analysis?.area || "Atendimento jurídico",
+          });
+          toast.success("Consulta salva automaticamente na Agenda");
+          upsertLead({ stage: "em_negociacao", urgency: "alta", description: agBlock.resumo_caso });
+          // Substitui a resposta da IA pela confirmação rica com link Meet
+          data = { ...data, response: buildAppointmentMessage(result) };
+        } catch (err) {
+          console.error("Erro ao registrar agendamento do bloco <AGENDAMENTO>:", err);
+          toast.error("Não consegui salvar o agendamento na Agenda");
+        }
       }
       if (data.analysis) setAnalysis(data.analysis);
       upsertLead({ description: msg });
