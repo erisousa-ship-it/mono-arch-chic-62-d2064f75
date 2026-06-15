@@ -876,22 +876,31 @@ export default function ChatIA() {
         await typeAssistantMessage(buildAppointmentMessage(result));
       } catch (err) {
         console.error("Erro ao agendar automaticamente:", err);
+        const slots = err?.availableSlots?.length ? err.availableSlots : await getAgendaSlots(4).catch(() => []);
+        const slot = slots[0] || nextBusinessSlot();
+        setScheduler({ date: slot.date, time: slot.time, duration: 60, area: analysis?.area || "Atendimento jurídico", availableSlots: slots });
         setThinking(false);
-        await typeAssistantMessage(
-          "Não consegui salvar automaticamente agora. Abra o botão Agendar consulta e confirme o horário manualmente."
-        );
-        openScheduler(analysis?.area || "Atendimento jurídico");
-        toast.error("Não consegui criar o agendamento automaticamente");
+        await typeAssistantMessage(`Esse horário não aparece livre na agenda da Dra. Kênia. ${buildAvailableSlotsMessage(slots)}`);
+        setShowAnalysisPanel(false);
+        toast.error("Horário indisponível na agenda");
       }
       sendingRef.current = false;
       return;
     }
+    if (SCHEDULE_REGEX.test(msg)) {
+      setThinking(false);
+      await openScheduler(analysis?.area || "Atendimento jurídico");
+      sendingRef.current = false;
+      return;
+    }
     try {
+      const agendaSlots = await getAgendaSlots(4).catch(() => []);
       const { data } = await api.post(
         "/chat/message",
         {
           message: msg,
           history: dedupeChatMessages(messagesRef.current).map((m) => ({ role: m.role, content: m.content })),
+          schedule_context: buildScheduleContext(agendaSlots),
           session_id: sessionId,
           visitor_name: name || null,
           visitor_phone: phone || null,
