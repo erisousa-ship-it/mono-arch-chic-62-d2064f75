@@ -996,9 +996,9 @@ const sanitizeWhatsAppTextPayload = (payload) => {
   if (!payload || typeof payload !== "object") return payload;
   return {
     ...payload,
-    ...(typeof payload.text === "string" ? { text: enforceSecretarySecondPerson(payload.text) } : {}),
-    ...(typeof payload.last_message === "string" ? { last_message: enforceSecretarySecondPerson(payload.last_message) } : {}),
-    ...(typeof payload.response === "string" ? { response: enforceSecretarySecondPerson(payload.response) } : {}),
+    ...(typeof payload.text === "string" ? { text: enforceSecretarySecondPerson(stripPromptLeak(payload.text)) } : {}),
+    ...(typeof payload.last_message === "string" ? { last_message: enforceSecretarySecondPerson(stripPromptLeak(payload.last_message)) } : {}),
+    ...(typeof payload.response === "string" ? { response: enforceSecretarySecondPerson(stripPromptLeak(payload.response)) } : {}),
     ...(payload.message && typeof payload.message === "object" ? { message: sanitizeWhatsAppTextPayload(payload.message) } : {}),
   };
 };
