@@ -1187,7 +1187,12 @@ const staticPost = (url, body = {}) => {
             },
           });
           if (error) throw error;
-          const cloudReply = sanitizeAssistantReply(data?.response || "", userText);
+          const rawCloudReply = data?.response || "";
+          const cloudAgendamento = parseAgendamentoBlock(rawCloudReply);
+          const createdAppointment = cloudAgendamento
+            ? (await staticPost("/appointments", agendamentoToAppointmentBody(cloudAgendamento))).data
+            : null;
+          const cloudReply = sanitizeAssistantReply(rawCloudReply, userText);
           if (cloudReply) {
             const responseText = isHistoryDumpReply(cloudReply) || isNearDuplicateReply(cloudReply, body.history || [])
               ? buildNonRepeatingFallback(userText)
@@ -1196,7 +1201,7 @@ const staticPost = (url, body = {}) => {
               session_id: data?.session_id || sessionId,
               response: responseText,
               audio_base64: data?.audio_base64 || null,
-              appointment: data?.appointment || null,
+              appointment: data?.appointment || createdAppointment || null,
               handoff: data?.handoff || false,
               speaker: data?.speaker || null,
               analysis: normalizeCaseAnalysis(data?.analysis, userText, body.history || []),
