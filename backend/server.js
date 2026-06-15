@@ -18,11 +18,36 @@ const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPA
 const AI_ROUTER_URL = (process.env.AI_ROUTER_URL || `${SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/ai-router`).replace(/\/+$/, "");
 const OLLAMA_BASE_URL = (process.env.OLLAMA_BASE_URL || process.env.OLLAMA_URL || "").replace(/\/+$/, "");
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL || "qwen2.5:3b-instruct";
+const QR_TTL_MS = Number(process.env.WHATSAPP_QR_TTL_MS || 75000);
+const QR_RENEW_AFTER_MS = Number(process.env.WHATSAPP_QR_RENEW_AFTER_MS || 60000);
+const QR_WATCHDOG_MS = Number(process.env.WHATSAPP_QR_WATCHDOG_MS || 60000);
+const START_DEBOUNCE_MS = Number(process.env.WHATSAPP_START_DEBOUNCE_MS || 7000);
+const processStartedAt = Date.now();
 
 const DEFAULT_BOT_PROMPT = `Você é a secretária jurídica da Dra. Kênia Garcia atendendo pelo WhatsApp.
-Responda sempre em português do Brasil, com tom humano, acolhedor, profissional e objetivo.
-Nunca diga que é IA, robô, chatbot ou modelo. Não use markdown extenso nem HTML.
-Faça uma pergunta por vez, mantenha continuidade pelo histórico e encaminhe para agendamento quando fizer sentido.`;
+
+Regras de identidade:
+- Responda sempre em português do Brasil, com tom humano, acolhedor, profissional e objetivo.
+- Nunca diga que é IA, robô, chatbot, modelo, sistema automatizado ou prompt.
+- Não use HTML. Evite markdown longo. Mensagens curtas, claras e naturais.
+
+Fluxo lógico obrigatório:
+1. Leia todo o histórico antes de responder e continue do último ponto, sem reiniciar a conversa.
+2. Identifique a intenção atual do cliente: dúvida jurídica, relato de caso, envio de documento, pedido de preço, agendamento ou urgência.
+3. Se faltar informação essencial, faça apenas UMA pergunta por vez.
+4. Não repita perguntas já respondidas. Use nome, cidade, datas, área jurídica e fatos já informados.
+5. Não invente leis, prazos, valores, documentos, decisões ou garantias de resultado.
+6. Quando houver risco, prazo, audiência, intimação, bloqueio, prisão, despejo, violência, acidente ou demissão recente, trate como prioridade e peça os dados mínimos para encaminhar.
+7. Quando o caso precisar de análise, conduza para agendamento com a Dra. Kênia Garcia.
+
+Roteiro de triagem:
+- Cumprimente somente se for o início real da conversa.
+- Entenda o problema principal.
+- Pergunte área/cidade/data/documentos somente quando ainda não estiver claro.
+- Explique a orientação inicial com prudência.
+- Ofereça agendamento quando fizer sentido.
+
+Resposta final deve sempre ajudar no próximo passo concreto do cliente.`;
 
 const app = express();
 app.use(cors({ origin: true }));
@@ -41,6 +66,14 @@ const state = {
   lastAutoReplyAt: null,
   autoReplyCount: 0,
   qrAttempts: 0,
+  qrCreatedAt: null,
+  qrExpiresAt: null,
+  lastQrRenewAt: 0,
+  lastConnectedAt: null,
+  lastDisconnectedAt: null,
+  reconnectAttempts: 0,
+  starting: false,
+  lastRestartReason: null,
   config: { provider: "baileys", bot_enabled: true, bot_prompt: DEFAULT_BOT_PROMPT },
 };
 
@@ -57,6 +90,19 @@ const connectionState = () => {
   return "connecting";
 };
 
+const qrAgeMs = () => state.qrCreatedAt ? Date.now() - state.qrCreatedAt : null;
+const qrExpiresInSeconds = () => {
+  if (!state.qrExpiresAt) return null;
+  return Math.max(0, Math.ceil((state.qrExpiresAt - Date.now()) / 1000));
+};
+
+const markQrUnavailable = () => {
+  state.qr = null;
+  state.qrDataUrl = null;
+  state.qrCreatedAt = null;
+  state.qrExpiresAt = null;
+};
+
 const stopSock = (reason = "restart") => {
   try { state.sock?.end?.(new Error(reason)); } catch {}
   state.sock = null;
@@ -69,7 +115,17 @@ const resetAuthSession = async () => {
 
 const scheduleStart = (opts = {}) => {
   if (reconnectTimer) clearTimeout(reconnectTimer);
-  reconnectTimer = setTimeout(() => startSock(opts).catch((e) => { state.lastError = e.message; }), opts.delay || 2000);
+  reconnectTimer = setTimeout(() => startSock(opts).catch((e) => { state.lastError = e.message; }), opts.delay || 5000);
+};
+
+const renewQrIfStale = () => {
+  if (state.connected || state.starting) return false;
+  const age = qrAgeMs();
+  const now = Date.now();
+  if (age == null || age < QR_RENEW_AFTER_MS || now - state.lastQrRenewAt < QR_RENEW_AFTER_MS) return false;
+  state.lastQrRenewAt = now;
+  scheduleStart({ delay: 500, reason: "qr-renew" });
+  return true;
 };
 
 function auth(req, res, next) {
@@ -128,9 +184,14 @@ async function generateDirectOllamaReply(messages) {
 
 async function generateAiReply(jid, text) {
   const history = rememberMessage(jid, "user", text);
+  const recentHistory = history.slice(-10);
   const messages = [
     { role: "system", content: state.config.bot_prompt || DEFAULT_BOT_PROMPT },
-    ...history,
+    {
+      role: "system",
+      content: "Antes de responder, confira se a pergunta já foi respondida no histórico. Responda só ao próximo passo lógico. Não faça mais de uma pergunta na mesma mensagem. Se o cliente perguntou algo direto, responda primeiro e depois avance a triagem.",
+    },
+    ...recentHistory,
   ];
 
   const directReply = await generateDirectOllamaReply(messages).catch((e) => {
@@ -200,14 +261,16 @@ async function handleIncomingMessage(msg) {
   }
 }
 
-async function startSock({ clearAuth = false } = {}) {
+async function startSock({ clearAuth = false, reason = "manual" } = {}) {
+  if (state.starting && Date.now() - state.startingAt < START_DEBOUNCE_MS) return;
   const seq = ++startSeq;
+  state.starting = true;
+  state.lastRestartReason = reason;
   if (clearAuth) await resetAuthSession();
   else stopSock("new-start");
   if (qrWatchdogTimer) clearTimeout(qrWatchdogTimer);
   state.startingAt = Date.now();
-  state.qr = null;
-  state.qrDataUrl = null;
+  markQrUnavailable();
   state.connected = false;
   state.lastError = null;
 
@@ -219,19 +282,23 @@ async function startSock({ clearAuth = false } = {}) {
     logger,
     printQRInTerminal: false,
     browser: ["Kenia", "Chrome", "1.0"],
+    connectTimeoutMs: 60000,
+    defaultQueryTimeoutMs: 60000,
+    keepAliveIntervalMs: 25000,
+    markOnlineOnConnect: false,
+    syncFullHistory: false,
   });
 
   qrWatchdogTimer = setTimeout(() => {
-    if (seq === startSeq && !state.connected && !state.qrDataUrl) {
-      state.qrAttempts += 1;
-      if (state.qrAttempts >= 2) {
-        state.lastError = "O Baileys não gerou QR automaticamente. Clique em Nova sessão / QR limpo para recriar a sessão.";
-        stopSock("qr-timeout");
-        return;
-      }
-      startSock({ clearAuth: true }).catch((e) => { state.lastError = e.message; });
+    if (seq !== startSeq || state.connected) return;
+    if (state.qrDataUrl) {
+      renewQrIfStale();
+      return;
     }
-  }, 25000);
+    state.qrAttempts += 1;
+    state.lastError = "QR ainda não foi gerado; recriando sessão de pareamento automaticamente.";
+    scheduleStart({ delay: 1000, clearAuth: state.qrAttempts >= 2, reason: "qr-watchdog" });
+  }, QR_WATCHDOG_MS);
 
   sock.ev.on("creds.update", saveCreds);
   sock.ev.on("connection.update", async (update) => {
@@ -241,6 +308,9 @@ async function startSock({ clearAuth = false } = {}) {
       state.qr = qr;
       state.lastError = null;
       state.qrAttempts = 0;
+      state.starting = false;
+      state.qrCreatedAt = Date.now();
+      state.qrExpiresAt = state.qrCreatedAt + QR_TTL_MS;
       try {
         state.qrDataUrl = await QRCode.toDataURL(qr, { width: 320, margin: 2 });
       } catch (e) {
@@ -249,19 +319,26 @@ async function startSock({ clearAuth = false } = {}) {
     }
     if (connection === "open") {
       state.connected = true;
+      state.starting = false;
+      state.reconnectAttempts = 0;
+      state.lastConnectedAt = Date.now();
       state.lastError = null;
-      state.qr = null;
-      state.qrDataUrl = null;
+      markQrUnavailable();
       if (qrWatchdogTimer) clearTimeout(qrWatchdogTimer);
     }
     if (connection === "close") {
       state.connected = false;
+      state.starting = false;
+      state.lastDisconnectedAt = Date.now();
+      markQrUnavailable();
       const code = lastDisconnect?.error?.output?.statusCode;
       state.lastError = lastDisconnect?.error?.message || `Conexão fechada (${code || "sem código"})`;
+      state.reconnectAttempts = Math.min(state.reconnectAttempts + 1, 8);
+      const delay = Math.min(30000, 2000 + state.reconnectAttempts * 2500);
       if (code !== DisconnectReason.loggedOut) {
-        scheduleStart({ delay: 2000, clearAuth: code === DisconnectReason.badSession || code === DisconnectReason.connectionReplaced });
+        scheduleStart({ delay, clearAuth: code === DisconnectReason.badSession || code === DisconnectReason.connectionReplaced, reason: `close-${code || "unknown"}` });
       } else {
-        scheduleStart({ delay: 1000, clearAuth: true });
+        scheduleStart({ delay: 2000, clearAuth: true, reason: "logged-out" });
       }
     }
   });
@@ -337,41 +414,55 @@ app.get("/api/whatsapp/diagnostics", auth, (_req, res) => {
   ] });
 });
 
+const whatsappStatusPayload = () => ({
+  connected: state.connected,
+  state: connectionState(),
+  hasQr: !!state.qrDataUrl,
+  qr: state.qrDataUrl,
+  raw: state.qr,
+  startingAt: state.startingAt,
+  secondsWaiting: state.startingAt ? Math.floor((Date.now() - state.startingAt) / 1000) : 0,
+  last_error: state.lastError,
+  bot_enabled: !!state.config.bot_enabled,
+  ollama_base_url_configured: !!OLLAMA_BASE_URL,
+  ai_router_url: AI_ROUTER_URL,
+  ollama_model: OLLAMA_MODEL,
+  last_ai_error: state.lastAiError,
+  last_auto_reply_at: state.lastAutoReplyAt,
+  auto_reply_count: state.autoReplyCount,
+  qr_created_at: state.qrCreatedAt,
+  qr_expires_at: state.qrExpiresAt,
+  qr_expires_in_s: qrExpiresInSeconds(),
+  last_connected_at: state.lastConnectedAt,
+  last_disconnected_at: state.lastDisconnectedAt,
+  reconnect_attempts: state.reconnectAttempts,
+  uptime_s: Math.floor((Date.now() - processStartedAt) / 1000),
+  last_restart_reason: state.lastRestartReason,
+});
+
 app.post("/api/whatsapp/test-connection", auth, (_req, res) => {
   res.json({ connected: state.connected, provider: "baileys", state: connectionState(), error: state.lastError });
 });
 
 app.get("/api/whatsapp/baileys/status", auth, (_req, res) => {
-  const secondsWaiting = state.startingAt ? Math.floor((Date.now() - state.startingAt) / 1000) : 0;
-  res.json({
-    connected: state.connected,
-    state: connectionState(),
-    hasQr: !!state.qrDataUrl,
-    startingAt: state.startingAt,
-    secondsWaiting,
-    last_error: state.lastError,
-    bot_enabled: !!state.config.bot_enabled,
-    ollama_base_url_configured: !!OLLAMA_BASE_URL,
-    ai_router_url: AI_ROUTER_URL,
-    ollama_model: OLLAMA_MODEL,
-    last_ai_error: state.lastAiError,
-    last_auto_reply_at: state.lastAutoReplyAt,
-    auto_reply_count: state.autoReplyCount,
-  });
+  renewQrIfStale();
+  res.json(whatsappStatusPayload());
 });
 
 app.get("/api/whatsapp/qr", auth, (_req, res) => {
-  res.json({ qr: state.qrDataUrl, raw: state.qr, state: connectionState(), last_error: state.lastError });
+  renewQrIfStale();
+  res.json({ ...whatsappStatusPayload(), qr: state.qrDataUrl, raw: state.qr });
 });
 
 app.get("/api/whatsapp/baileys/qr", auth, (_req, res) => {
-  res.json({ qr: state.qrDataUrl, raw: state.qr, state: connectionState(), last_error: state.lastError });
+  renewQrIfStale();
+  res.json({ ...whatsappStatusPayload(), qr: state.qrDataUrl, raw: state.qr });
 });
 
 app.post("/api/whatsapp/baileys/restart", auth, async (_req, res) => {
   try {
-    await startSock();
-    res.json({ ok: true, connected: state.connected, state: connectionState(), qr: state.qrDataUrl });
+    await startSock({ reason: "api-restart" });
+    res.json({ ok: true, ...whatsappStatusPayload() });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -379,8 +470,8 @@ app.post("/api/whatsapp/baileys/restart", auth, async (_req, res) => {
 
 app.post("/api/whatsapp/baileys/reconnect", auth, async (_req, res) => {
   try {
-    await startSock();
-    res.json({ ok: true, connected: state.connected, state: connectionState(), qr: state.qrDataUrl });
+    await startSock({ reason: "api-reconnect" });
+    res.json({ ok: true, ...whatsappStatusPayload() });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -389,8 +480,8 @@ app.post("/api/whatsapp/baileys/reconnect", auth, async (_req, res) => {
 app.post("/api/whatsapp/baileys/reset-session", auth, async (_req, res) => {
   try {
     state.qrAttempts = 0;
-    await startSock({ clearAuth: true });
-    res.json({ ok: true, connected: false, state: connectionState(), qr: state.qrDataUrl });
+    await startSock({ clearAuth: true, reason: "api-reset-session" });
+    res.json({ ok: true, ...whatsappStatusPayload() });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -400,10 +491,9 @@ app.post("/api/whatsapp/baileys/logout", auth, async (_req, res) => {
   try {
     try { await state.sock?.logout?.(); } catch {}
     state.connected = false;
-    state.qr = null;
-    state.qrDataUrl = null;
-    await startSock();
-    res.json({ ok: true, connected: false, state: "connecting" });
+    markQrUnavailable();
+    await startSock({ clearAuth: true, reason: "api-logout-new-qr" });
+    res.json({ ok: true, ...whatsappStatusPayload() });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -413,8 +503,7 @@ app.post("/api/whatsapp/logout", auth, async (_req, res) => {
   try {
     try { await state.sock?.logout?.(); } catch {}
     state.connected = false;
-    state.qr = null;
-    state.qrDataUrl = null;
+    markQrUnavailable();
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });

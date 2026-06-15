@@ -3,12 +3,8 @@ import { useEffect, useState } from "react";
 /**
  * DebugErrorThrower
  *
- * Componente sem UI. Escuta o evento global "lovable-debug-error" e, ao receber
- * uma mensagem, lança um Error DURANTE O RENDER para que o erro escape ao
- * overlay global "Try to Fix" da Lovable.
- *
- * NÃO envolver em ErrorBoundary / Suspense / try-catch.
- * NÃO trocar o throw por console.error, toast, log ou setTimeout.
+ * Componente sem UI. Escuta o evento global "lovable-debug-error" e registra a
+ * instrução sem derrubar a aplicação em produção/preview.
  */
 export const DebugErrorThrower = () => {
   const [message, setMessage] = useState<string | null>(null);
@@ -24,9 +20,12 @@ export const DebugErrorThrower = () => {
     return () => window.removeEventListener("lovable-debug-error", handler as EventListener);
   }, []);
 
-  if (message) {
-    throw new Error(message);
-  }
+  useEffect(() => {
+    if (!message) return;
+    console.warn("Instrução de debug recebida sem interromper a interface:", message);
+    window.dispatchEvent(new CustomEvent("lovable-debug-instruction-received", { detail: message }));
+    setMessage(null);
+  }, [message]);
 
   return null;
 };
