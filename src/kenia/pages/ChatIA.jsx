@@ -1185,6 +1185,22 @@ export default function ChatIA() {
                       <X className="w-4 h-4" />
                     </button>
                   </div>
+                  {scheduler.availableSlots?.length > 0 && (
+                    <div className="mb-3 flex flex-wrap gap-2">
+                      {scheduler.availableSlots.slice(0, 4).map((slot) => (
+                        <Button
+                          key={`${slot.date}-${slot.time}`}
+                          type="button"
+                          variant={scheduler.date === slot.date && scheduler.time === slot.time ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setScheduler({ ...scheduler, date: slot.date, time: slot.time })}
+                          className="h-8 text-xs"
+                        >
+                          {formatSlot(slot)}
+                        </Button>
+                      ))}
+                    </div>
+                  )}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <div>
                       <label className="text-[11px] uppercase tracking-wider text-nude-600">Data</label>
