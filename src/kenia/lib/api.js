@@ -690,7 +690,12 @@ const buildTemporalAnswer = () => {
   const now = new Date();
   const date = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long", year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
   const time = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }).format(now);
-  return `Hoje é ${date}, e agora são ${time}.`;
+  const hourStr = new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", hour12: false }).format(now);
+  const hour = parseInt(hourStr, 10);
+  let greeting = "Boa noite";
+  if (hour >= 5 && hour < 12) greeting = "Bom dia";
+  else if (hour >= 12 && hour < 18) greeting = "Boa tarde";
+  return `Hoje é ${date}, e agora são ${time} (horário de Brasília). Saudação adequada agora: "${greeting}".`;
 };
 
 const defaultWhatsAppConfig = {
