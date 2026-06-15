@@ -456,8 +456,8 @@ app.get("/api/whatsapp/baileys/qr", auth, (_req, res) => {
 
 app.post("/api/whatsapp/baileys/restart", auth, async (_req, res) => {
   try {
-    await startSock();
-    res.json({ ok: true, connected: state.connected, state: connectionState(), qr: state.qrDataUrl });
+    await startSock({ reason: "api-restart" });
+    res.json({ ok: true, ...whatsappStatusPayload() });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -465,8 +465,8 @@ app.post("/api/whatsapp/baileys/restart", auth, async (_req, res) => {
 
 app.post("/api/whatsapp/baileys/reconnect", auth, async (_req, res) => {
   try {
-    await startSock();
-    res.json({ ok: true, connected: state.connected, state: connectionState(), qr: state.qrDataUrl });
+    await startSock({ reason: "api-reconnect" });
+    res.json({ ok: true, ...whatsappStatusPayload() });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -475,8 +475,8 @@ app.post("/api/whatsapp/baileys/reconnect", auth, async (_req, res) => {
 app.post("/api/whatsapp/baileys/reset-session", auth, async (_req, res) => {
   try {
     state.qrAttempts = 0;
-    await startSock({ clearAuth: true });
-    res.json({ ok: true, connected: false, state: connectionState(), qr: state.qrDataUrl });
+    await startSock({ clearAuth: true, reason: "api-reset-session" });
+    res.json({ ok: true, ...whatsappStatusPayload() });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -486,10 +486,9 @@ app.post("/api/whatsapp/baileys/logout", auth, async (_req, res) => {
   try {
     try { await state.sock?.logout?.(); } catch {}
     state.connected = false;
-    state.qr = null;
-    state.qrDataUrl = null;
-    await startSock();
-    res.json({ ok: true, connected: false, state: "connecting" });
+    markQrUnavailable();
+    await startSock({ clearAuth: true, reason: "api-logout-new-qr" });
+    res.json({ ok: true, ...whatsappStatusPayload() });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -499,8 +498,7 @@ app.post("/api/whatsapp/logout", auth, async (_req, res) => {
   try {
     try { await state.sock?.logout?.(); } catch {}
     state.connected = false;
-    state.qr = null;
-    state.qrDataUrl = null;
+    markQrUnavailable();
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
