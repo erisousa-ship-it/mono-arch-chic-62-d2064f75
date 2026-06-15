@@ -1182,7 +1182,7 @@ const staticPost = (url, body = {}) => {
             appointment: null,
             handoff: false,
             speaker: null,
-            analysis: { acertividade: 80, qualificacao: "ok" },
+            analysis: normalizeCaseAnalysis(null, userText, body.history || []),
             server_time: null,
           });
       } catch (e) {
@@ -1192,7 +1192,7 @@ const staticPost = (url, body = {}) => {
           session_id: sessionId,
           response: fallbackReply,
           audio_base64: null,
-          analysis: { acertividade: 40, qualificacao: "fallback" },
+          analysis: normalizeCaseAnalysis(null, body.message || body.text || "", body.history || []),
         });
     })();
   }
