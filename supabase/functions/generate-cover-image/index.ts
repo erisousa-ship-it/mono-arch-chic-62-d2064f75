@@ -74,12 +74,6 @@ Deno.serve(async (req) => {
           errors.push("lovable: empty response");
         } else {
           errors.push(`lovable_${resp.status}: ${raw.slice(0, 300)}`);
-          if (resp.status === 429 || resp.status === 402) {
-            return new Response(JSON.stringify({ error: errors.join(" | "), upstream_status: resp.status }), {
-              status: resp.status,
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
-          }
         }
       } catch (e) {
         errors.push(`lovable: ${String(e)}`);
