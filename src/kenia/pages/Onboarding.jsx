@@ -54,6 +54,13 @@ export default function Onboarding() {
     office_name: "", oab: user?.oab || "",
     main_area: "Trabalhista",
     bot_prompt: DEFAULT_PROMPT,
+    city: "",
+    public_target: "",
+    tone: "Profissional e acolhedor",
+    differentials: "",
+    typical_cases: "",
+    qualification_criteria: "",
+    office_hours: "Seg a Sex, 9h às 18h",
   });
   const [zapi, setZapi] = useState({
     zapi_instance_id: "", zapi_instance_token: "", zapi_client_token: "",
@@ -209,6 +216,84 @@ export default function Onboarding() {
               <div>
                 <Label>OAB (opcional)</Label>
                 <Input placeholder="123456/SP" value={data.oab} onChange={e => setData({ ...data, oab: e.target.value })} className="h-11" />
+              </div>
+              <div className="grid sm:grid-cols-2 gap-3">
+                <div>
+                  <Label>Cidade / atuação</Label>
+                  <Input
+                    placeholder="Ex: São Paulo, SP"
+                    value={data.city}
+                    onChange={e => setData({ ...data, city: e.target.value })}
+                    className="h-11"
+                  />
+                </div>
+                <div>
+                  <Label>Horário de atendimento</Label>
+                  <Input
+                    placeholder="Seg a Sex, 9h às 18h"
+                    value={data.office_hours}
+                    onChange={e => setData({ ...data, office_hours: e.target.value })}
+                    className="h-11"
+                  />
+                </div>
+              </div>
+              <div>
+                <Label>Público-alvo dos seus clientes</Label>
+                <Input
+                  placeholder="Ex: trabalhadores CLT, pequenas empresas, aposentados…"
+                  value={data.public_target}
+                  onChange={e => setData({ ...data, public_target: e.target.value })}
+                  className="h-11"
+                />
+                <div className="text-xs text-nude-500 mt-1">
+                  A IA usa essa informação para adaptar a linguagem e o tom da conversa.
+                </div>
+              </div>
+              <div>
+                <Label>Tom de voz preferido</Label>
+                <Select value={data.tone} onValueChange={v => setData({ ...data, tone: v })}>
+                  <SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {[
+                      "Profissional e acolhedor",
+                      "Formal e técnico",
+                      "Próximo e informal",
+                      "Empático e consultivo",
+                    ].map(t => (
+                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label>Diferenciais do escritório (opcional)</Label>
+                <Textarea
+                  rows={2}
+                  placeholder="Ex: 15 anos de experiência, atendimento humanizado, primeira consulta gratuita…"
+                  value={data.differentials}
+                  onChange={e => setData({ ...data, differentials: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label>Tipos de caso mais comuns (opcional)</Label>
+                <Textarea
+                  rows={2}
+                  placeholder="Ex: rescisão indireta, horas extras, adicional de insalubridade…"
+                  value={data.typical_cases}
+                  onChange={e => setData({ ...data, typical_cases: e.target.value })}
+                />
+                <div className="text-xs text-nude-500 mt-1">
+                  Quanto mais específico, melhor a IA qualifica os leads recebidos.
+                </div>
+              </div>
+              <div>
+                <Label>O que torna um lead qualificado para você? (opcional)</Label>
+                <Textarea
+                  rows={2}
+                  placeholder="Ex: já foi demitido, possui carteira assinada, está dentro do prazo prescricional…"
+                  value={data.qualification_criteria}
+                  onChange={e => setData({ ...data, qualification_criteria: e.target.value })}
+                />
               </div>
               <div className="pt-2 flex justify-end">
                 <Button onClick={saveStep1} className="bg-nude-900 hover:bg-nude-800 h-11 px-6" data-testid="ob-next-1">
