@@ -554,7 +554,7 @@ export const stripPromptLeak = (reply) => {
 
 const sanitizeAssistantReply = (reply, userMessage = "") =>
   enforceSecretarySecondPerson(
-    removeUnaskedTemporalLeaks(removeAssistantMetaPreamble(reply), userMessage)
+    stripPromptLeak(removeUnaskedTemporalLeaks(removeAssistantMetaPreamble(reply), userMessage))
       .replace(/^["“”'`]+|["“”'`]+$/g, "")
       .trim()
   );
