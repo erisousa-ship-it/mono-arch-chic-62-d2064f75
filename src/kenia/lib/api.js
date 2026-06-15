@@ -576,12 +576,37 @@ const buildNonRepeatingFallback = (message) => {
   if (userAskedTemporalInfo(text)) return buildTemporalAnswer();
   if (isHandoffRequest(text)) return buildHandoffReply();
   if (/\b(agendar|marcar|consulta|reuni[aã]o|hor[aá]rio|atendimento)\b/i.test(text)) {
-    return "Claro. Para registrar a consulta, me envie nome completo, telefone, e-mail, cidade/estado, área do caso, data e horário desejados.";
+    return "Claro. Para registrar a consulta, me envie nome completo, telefone, e-mail, cidade/estado, breve resumo do caso, data e horário desejados.";
   }
   if (/\b(div[oó]rcio|guarda|pens[aã]o|fam[ií]lia|invent[aá]rio|trabalhista|demiss[aã]o|rescis[aã]o|inss|aposentadoria|consumidor|audi[eê]ncia|intima[cç][aã]o)\b/i.test(text)) {
     return "Entendi. Para direcionar melhor seu atendimento, me conte quando isso aconteceu, sua cidade/estado e se existe algum prazo ou audiência marcado.";
   }
-  return "Entendi. Para seguir sem repetir informações, me conte em poucas palavras o que aconteceu e qual ajuda você precisa agora.";
+  return buildGeneralTopicReply(message);
+};
+
+const isGeneralSupportTopic = (message = "") => {
+  const text = normalizePortuguese(message);
+  if (!text) return false;
+  const legalSignal = /\b(processo|advogad|juridic|direito|lei|boletim|ocorrencia|audiencia|intimacao|prazo|contrato|divorcio|guarda|pensao|demissao|rescisao|inss|consumidor|indenizacao|dano moral|medida protetiva)\b/.test(text);
+  const generalSignal = /\b(triste|ansios|ansiedade|medo|familia|familiar|relacionamento|traicao|briga|religiao|politica|sexualidade|drogas|racismo|luto|depress|solid[aã]o|confus|conselho|desabafo|opini[aã]o|polemico|saude mental|bem estar|o que eu faco|me ajuda)\b/.test(text);
+  return generalSignal && !legalSignal;
+};
+
+const buildGeneralTopicReply = (message = "") => {
+  const text = normalizePortuguese(message);
+  if (/\b(suicid|me matar|tirar minha vida|nao quero viver|risco de vida)\b/.test(text)) {
+    return "Sinto muito que você esteja passando por isso. Se houver risco agora, procure ajuda imediata: CVV 188, SAMU 192 ou Polícia 190. Você não precisa enfrentar isso sozinha; me diga apenas se você está em segurança neste momento.";
+  }
+  if (/\b(violencia|agress|ameaca|abus|medo de alguem)\b/.test(text)) {
+    return "Sinto muito por isso. Se você estiver em perigo agora, acione 190; em violência contra mulher, Disque 180, e em outras violações, Disque 100. Você está em local seguro neste momento?";
+  }
+  if (/\b(triste|luto|depress|solid[aã]o|ansios|ansiedade|medo|confus|familia|familiar|relacionamento|traicao|briga)\b/.test(text)) {
+    return "Sinto muito que você esteja passando por isso; faz sentido se sentir abalada quando algo mexe com a família ou com pessoas próximas. Tente respirar, se afastar um pouco do conflito e organizar o que aconteceu antes de tomar qualquer decisão. O que aconteceu nessa situação?";
+  }
+  if (/\b(religiao|politica|sexualidade|drogas|racismo|aborto|polemico|opini[aã]o)\b/.test(text)) {
+    return "Podemos conversar sobre isso com respeito e sem julgamento. Em temas sensíveis, o melhor é olhar o contexto, os impactos em você e nas outras pessoas, e buscar uma decisão segura e responsável. O que exatamente aconteceu ou qual dúvida você quer dividir?";
+  }
+  return "Entendi. Pode falar comigo sobre isso sem julgamento; vou te responder de forma humana e prática. O que aconteceu?";
 };
 
 const clampPercent = (value, fallback = 50) => {
@@ -1128,14 +1153,15 @@ const staticPost = (url, body = {}) => {
   if (path === "/chat/message") {
     return (async () => {
       const sessionId = body.session_id || nextId("session");
-      const fallbackReply =
-        "Tive uma instabilidade momentânea. Estou aqui para te ajudar; pode me contar o que aconteceu em uma frase curta?";
+      const userText = body.message || body.text || "";
+      const fallbackReply = isGeneralSupportTopic(userText)
+        ? buildGeneralTopicReply(userText)
+        : "Tive uma instabilidade momentânea. Estou aqui para te ajudar; pode me contar o que aconteceu em uma frase curta?";
       try {
         const history = (body.history || [])
           .map((m) => `${m.role === "user" ? "Cliente" : "Assistente"}: ${m.content}`)
           .join("\n");
         const system = DEFAULT_PROMPT;
-        const userText = body.message || body.text || "";
         if (userAskedTemporalInfo(userText)) {
           return response({
             session_id: sessionId,
