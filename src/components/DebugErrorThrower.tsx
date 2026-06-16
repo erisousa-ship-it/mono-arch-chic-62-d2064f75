@@ -1,10 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 /**
  * DebugErrorThrower
  *
- * Componente sem UI. Escuta o evento "lovable-debug-error" e, durante o
- * render, lança um erro fatal real para acionar o overlay global da Lovable.
+ * Componente sem UI. Escuta o evento "lovable-debug-error" e lança um erro
+ * assíncrono real para acionar o overlay global da Lovable sem desmontar o app.
  * Esse throw é INTENCIONAL — não remover, não envolver em try/catch nem em
  * ErrorBoundary. O fluxo correto é: Popup -> CustomEvent -> state -> throw
  * -> overlay global -> usuário clica em "Try to Fix".
