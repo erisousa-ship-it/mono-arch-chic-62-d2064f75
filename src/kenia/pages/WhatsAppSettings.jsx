@@ -421,6 +421,7 @@ export default function WhatsAppSettings() {
       : s;
   const diagnosticChecks = (Array.isArray(diag?.checks) ? diag.checks : [])
     .filter((c) => {
+      if (["auto-reply", "ollama"].includes(String(c?.id || ""))) return true;
       const blob = `${c?.id || ""} ${c?.label || ""} ${c?.msg || ""} ${c?.hint || ""}`.toLowerCase();
       return !/ollama|ngrok|11434|ia\s*local/.test(blob);
     })

@@ -72,6 +72,8 @@ const state = {
   startingAt: 0,
   lastError: null,
   lastAiError: null,
+  lastAiProvider: null,
+  lastAiFailureChain: [],
   lastAutoReplyAt: null,
   autoReplyCount: 0,
   qrAttempts: 0,
@@ -454,7 +456,7 @@ const callEmergentChat = async ({ messages, key = "" }) => {
 async function generateDirectOllamaReply(messages) {
   if (!OLLAMA_BASE_URL) throw new Error("OLLAMA_BASE_URL não configurado no backend WhatsApp");
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 45000);
+  const timeout = setTimeout(() => controller.abort(), 25000);
   try {
     const r = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
       method: "POST",
@@ -470,6 +472,32 @@ async function generateDirectOllamaReply(messages) {
     return reply;
   } catch (e) {
     throw new Error(e?.name === "AbortError" ? "ollama_timeout" : e.message);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function generateAiRouterReply(messages) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 25000);
+  try {
+    const r = await fetch(AI_ROUTER_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(SUPABASE_ANON_KEY ? { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } : {}),
+      },
+      signal: controller.signal,
+      body: JSON.stringify({ mode: "chat", messages, model: OLLAMA_MODEL }),
+    });
+    const raw = await r.text();
+    if (!r.ok) throw new Error(`ai-router_${r.status}: ${raw.slice(0, 300)}`);
+    const data = JSON.parse(raw || "{}");
+    const reply = String(data.text || data.response || "").trim();
+    if (!reply) throw new Error("ai-router_empty_response");
+    return { provider: data.provider ? `ai-router:${data.provider}` : "ai-router", text: reply };
+  } catch (e) {
+    throw new Error(e?.name === "AbortError" ? "ai-router_timeout" : e.message);
   } finally {
     clearTimeout(timeout);
   }
@@ -491,59 +519,35 @@ async function generateAiReply(jid, text) {
     ...history,
   ];
 
-  // 1) Tenta Ollama direto primeiro (provedor preferido para WhatsApp)
-  const directReply = await generateDirectOllamaReply(messages).catch((e) => {
-    state.lastAiError = `ollama_direct: ${e.message}`;
-    console.warn("[whatsapp-ai] ollama direto falhou:", e.message);
-    return null;
-  });
-  if (directReply) {
-    const safeReply = sanitizeOutbound(directReply);
-    rememberMessage(jid, "assistant", safeReply);
-    state.lastAiError = null;
-    return safeReply;
+  const failures = [];
+  const providers = [
+    { name: "ollama_direct", run: () => generateDirectOllamaReply(messages) },
+    { name: "emergent", run: async () => callEmergentChat({ messages }) },
+    { name: "ai-router", run: () => generateAiRouterReply(messages) },
+  ];
+
+  for (const item of providers) {
+    try {
+      const out = await item.run();
+      const provider = typeof out === "object" ? out.provider || item.name : item.name;
+      const rawText = typeof out === "object" ? out.text : out;
+      const safeReply = sanitizeOutbound(String(rawText || "").trim());
+      if (!safeReply) throw new Error("empty_response");
+      rememberMessage(jid, "assistant", safeReply);
+      state.lastAiError = null;
+      state.lastAiProvider = provider;
+      state.lastAiFailureChain = failures;
+      return safeReply;
+    } catch (e) {
+      const entry = `${item.name}: ${e.message}`;
+      failures.push(entry);
+      state.lastAiError = failures.join(" | ");
+      state.lastAiFailureChain = failures;
+      console.warn(`[whatsapp-ai] ${item.name} falhou:`, e.message);
+    }
   }
 
-  // 2) Fallback Emergent
-  const emergentReply = await callEmergentChat({ messages }).catch((e) => {
-    state.lastAiError = `emergent: ${e.message}`;
-    console.warn("[whatsapp-ai] emergent falhou:", e.message);
-    return null;
-  });
-  if (emergentReply) {
-    const safeReply = sanitizeOutbound(emergentReply);
-    rememberMessage(jid, "assistant", safeReply);
-    state.lastAiError = null;
-    return safeReply;
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25000);
-  try {
-    const r = await fetch(AI_ROUTER_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(SUPABASE_ANON_KEY ? { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } : {}),
-      },
-      signal: controller.signal,
-      body: JSON.stringify({ mode: "chat", provider: "ollama", messages, model: OLLAMA_MODEL }),
-    });
-    const raw = await r.text();
-    if (!r.ok) throw new Error(`ai-router_${r.status}: ${raw.slice(0, 300)}`);
-    const data = JSON.parse(raw || "{}");
-    const reply = sanitizeOutbound(String(data.text || data.response || "").trim());
-    if (!reply) throw new Error("ai-router_empty_response");
-    rememberMessage(jid, "assistant", reply);
-    state.lastAiError = null;
-    return reply;
-  } catch (e) {
-    const msg = e?.name === "AbortError" ? "ai-router_timeout" : e.message;
-    state.lastAiError = msg;
-    throw new Error(msg);
-  } finally {
-    clearTimeout(timeout);
-  }
+  throw new Error(failures.join(" | ") || "no_ai_provider_available");
 }
 
 async function handleIncomingMessage(msg) {
@@ -685,36 +689,55 @@ app.get("/api/ai/ping", async (_req, res) => {
     reachable: false,
     tags_status: null,
     chat_ok: false,
+    fallback_ok: false,
+    fallback_provider: null,
     error: null,
+    fallback_error: null,
   };
-  if (!OLLAMA_BASE_URL) { result.error = "OLLAMA_BASE_URL não definido no Render"; return res.json(result); }
-  try {
-    const u = new URL(OLLAMA_BASE_URL);
-    result.is_public = !/^(localhost|127\.|0\.0\.0\.0|::1|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(u.hostname);
-  } catch { result.error = "OLLAMA_BASE_URL inválida"; return res.json(result); }
-  try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 8000);
-    const r = await fetch(`${OLLAMA_BASE_URL}/api/tags`, { headers: { "ngrok-skip-browser-warning": "true" }, signal: ctrl.signal });
-    clearTimeout(t);
-    result.tags_status = r.status;
-    result.reachable = r.ok;
-    if (!r.ok) result.error = `tags HTTP ${r.status}`;
-  } catch (e) { result.error = `tags: ${e.message}`; return res.json(result); }
-  try {
-    const ctrl = new AbortController();
-    const t = setTimeout(() => ctrl.abort(), 20000);
-    const r = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
-      signal: ctrl.signal,
-      body: JSON.stringify({ model: OLLAMA_MODEL, stream: false, messages: [{ role: "user", content: "ping" }], options: { num_predict: 8 } }),
-    });
-    clearTimeout(t);
-    const data = await r.json().catch(() => ({}));
-    result.chat_ok = r.ok && !!(data?.message?.content);
-    if (!result.chat_ok) result.error = `chat HTTP ${r.status}: ${data?.error || ""}`;
-  } catch (e) { result.error = `chat: ${e.message}`; }
+  if (!OLLAMA_BASE_URL) {
+    result.error = "OLLAMA_BASE_URL não definido no Render";
+  } else {
+    try {
+      const u = new URL(OLLAMA_BASE_URL);
+      result.is_public = !/^(localhost|127\.|0\.0\.0\.0|::1|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(u.hostname);
+    } catch { result.error = "OLLAMA_BASE_URL inválida"; }
+    if (result.is_public) {
+      try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 8000);
+        const r = await fetch(`${OLLAMA_BASE_URL}/api/tags`, { headers: { "ngrok-skip-browser-warning": "true" }, signal: ctrl.signal });
+        clearTimeout(t);
+        result.tags_status = r.status;
+        result.reachable = r.ok;
+        if (!r.ok) result.error = `tags HTTP ${r.status}`;
+      } catch (e) { result.error = `tags: ${e.message}`; }
+      if (result.reachable) {
+        try {
+          const ctrl = new AbortController();
+          const t = setTimeout(() => ctrl.abort(), 20000);
+          const r = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
+            signal: ctrl.signal,
+            body: JSON.stringify({ model: OLLAMA_MODEL, stream: false, messages: [{ role: "user", content: "ping" }], options: { num_predict: 8 } }),
+          });
+          clearTimeout(t);
+          const data = await r.json().catch(() => ({}));
+          result.chat_ok = r.ok && !!(data?.message?.content);
+          if (!result.chat_ok) result.error = `chat HTTP ${r.status}: ${data?.error || ""}`;
+        } catch (e) { result.error = `chat: ${e.message}`; }
+      }
+    }
+  }
+  if (!result.chat_ok) {
+    try {
+      const fallback = await generateAiRouterReply([{ role: "user", content: "Responda apenas: ok" }]);
+      result.fallback_ok = !!fallback?.text;
+      result.fallback_provider = fallback?.provider || "ai-router";
+    } catch (e) {
+      result.fallback_error = e.message;
+    }
+  }
   res.json(result);
 });
 
@@ -785,7 +808,7 @@ app.put("/api/whatsapp/config", auth, (req, res) => {
 app.get("/api/whatsapp/diagnostics", auth, (_req, res) => {
   res.json({ ok: true, static_mode: false, checks: [
     { id: "baileys-backend", ok: true, label: "Backend Baileys ativo", msg: "Serviço WhatsApp publicado e respondendo.", hint: state.connected ? "WhatsApp conectado." : state.qrDataUrl ? "QR Code disponível para leitura." : "Se ficar inicializando por mais de 30s, gere uma nova sessão." },
-    { id: "ollama", ok: !state.lastAiError && (!!OLLAMA_BASE_URL || !!AI_ROUTER_URL), label: "Resposta automática IA", msg: state.lastAiError ? `Última falha: ${state.lastAiError}` : (OLLAMA_BASE_URL ? "Backend ligado direto ao Ollama." : "Backend ligado ao ai-router/Ollama."), hint: state.lastAutoReplyAt ? `Última resposta enviada: ${new Date(state.lastAutoReplyAt).toLocaleString("pt-BR")}` : "Envie uma mensagem para este WhatsApp para testar a resposta automática." },
+    { id: "auto-reply", ok: !state.lastAiError && (!!OLLAMA_BASE_URL || !!AI_ROUTER_URL || !!EMERGENT_API_KEY), label: "Resposta automática IA", msg: state.lastAiError ? `Última falha: ${state.lastAiError}` : `Último provedor OK: ${state.lastAiProvider || (OLLAMA_BASE_URL ? "ollama_direct" : "aguardando teste")}.`, hint: state.lastAutoReplyAt ? `Última resposta enviada: ${new Date(state.lastAutoReplyAt).toLocaleString("pt-BR")}` : "Envie uma mensagem para este WhatsApp para testar a resposta automática." },
   ] });
 });
 
@@ -807,6 +830,8 @@ app.get("/api/whatsapp/baileys/status", auth, (_req, res) => {
     ai_router_url: AI_ROUTER_URL,
     ollama_model: OLLAMA_MODEL,
     last_ai_error: state.lastAiError,
+    last_ai_provider: state.lastAiProvider,
+    last_ai_failure_chain: state.lastAiFailureChain,
     last_auto_reply_at: state.lastAutoReplyAt,
     auto_reply_count: state.autoReplyCount,
   });
