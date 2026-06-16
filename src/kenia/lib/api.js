@@ -1435,8 +1435,8 @@ const staticPost = (url, body = {}) => {
         genError = genError || e?.message || String(e);
       }
 
-      // 2) OPCIONAL: função paga só quando explicitamente solicitada; evita chamar gateway sem créditos.
-      if (!b64 && body.use_paid_gateway) {
+      // 2) Função de imagem com qualidade superior. Ela própria evita gateway pago sem créditos e faz fallback seguro.
+      if (!b64) {
       try {
         const { data, error } = await supabase.functions.invoke("generate-cover-image", {
           body: {
@@ -1470,12 +1470,12 @@ const staticPost = (url, body = {}) => {
         // (ex.: "trabalhador sendo demitido" => mostra trabalhador sendo demitido).
         const polPrompt =
           `Fotografia editorial cinematográfica, ultra realista, mostrando literalmente a cena: ${topic}. ` +
-          `A cena deve ser claramente reconhecível e fiel ao tema descrito. ` +
+          `A cena deve ser claramente reconhecível e fiel ao tema descrito, com no máximo 1 ou 2 personagens principais. ` +
           `Rostos nítidos, em foco perfeito, traços faciais bem definidos, olhos nítidos, pele detalhada, ` +
-          `lente 50mm f/2.8, foco preciso no rosto, sem desfoque facial, alta definição 8k, sharp focus on faces. ` +
+          `lente 50mm f/2.8, plano médio, foco preciso no rosto, sem close-up extremo, sem desfoque facial, alta definição 8k, sharp focus on faces. ` +
           `Iluminação profissional, composição para ${styleHint}, paleta nude/dourada sutil, ` +
           `sem qualquer texto, letras ou logotipos na imagem. ` +
-          `Negative: blurry face, out of focus face, distorted face, deformed eyes, low quality, pixelated, smudged features.`;
+          `Negative: blurry face, out of focus face, distorted face, deformed eyes, bad anatomy, extra fingers, deformed hands, duplicate people, low quality, pixelated, smudged features.`;
         const seed = Math.floor(Math.random() * 1_000_000);
         const polUrl =
           `https://image.pollinations.ai/prompt/${encodeURIComponent(polPrompt)}` +
