@@ -190,6 +190,23 @@ const isReplyableJid = (jid = "") => {
   return jid.endsWith("@s.whatsapp.net") || jid.endsWith("@lid") || jid.endsWith("@g.us");
 };
 
+const normalizePhoneToJid = (phone = "") => {
+  const raw = String(phone || "").trim();
+  if (raw.endsWith("@s.whatsapp.net") || raw.endsWith("@g.us") || raw.endsWith("@lid")) return raw;
+  let digits = raw.replace(/\D/g, "");
+  if (!digits) return "";
+  if (!digits.startsWith("55") && digits.length >= 10 && digits.length <= 11) digits = `55${digits}`;
+  return `${digits}@s.whatsapp.net`;
+};
+
+const sendWhatsAppText = async (jid, text, options = {}) => {
+  if (!state.sock || !state.connected) throw new Error("WhatsApp não conectado. Escaneie o QR Code antes de enviar.");
+  const body = String(text || "").trim();
+  if (!jid || !body) throw new Error("Destino ou mensagem vazios.");
+  await state.sock.sendMessage(jid, { text: body }, options);
+  return true;
+};
+
 const rememberMessage = (jid, role, content) => {
   const history = conversationHistory.get(jid) || [];
   history.push({ role, content: String(content || "").slice(0, 1200) });
@@ -495,14 +512,14 @@ async function handleIncomingMessage(msg) {
       }
     }
     if (!reply) reply = "Pode me confirmar essa informação, por favor?";
-    await state.sock?.sendMessage(jid, { text: reply }, { quoted: msg });
+    await sendWhatsAppText(jid, reply, { quoted: msg });
     state.lastAutoReplyAt = Date.now();
     state.autoReplyCount += 1;
   } catch (e) {
     state.lastAiError = e.message;
     console.error("auto reply failed", e);
     try {
-      await state.sock?.sendMessage(jid, { text: "Tive uma instabilidade momentânea no atendimento. Pode me enviar sua mensagem novamente, por favor?" }, { quoted: msg });
+      await sendWhatsAppText(jid, "Tive uma instabilidade momentânea no atendimento. Pode me enviar sua mensagem novamente, por favor?", { quoted: msg });
     } catch {}
   } finally {
     try { await state.sock?.sendPresenceUpdate?.("paused", jid); } catch {}
