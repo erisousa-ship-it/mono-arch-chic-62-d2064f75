@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { prompt, reference_image_base64, logo_base64 } = await req.json();
+    const { prompt, style, reference_image_base64, logo_base64 } = await req.json();
     if (!prompt || typeof prompt !== "string") {
       return new Response(JSON.stringify({ error: "Prompt obrigatório" }), {
         status: 400,
@@ -44,10 +44,13 @@ Deno.serve(async (req) => {
       });
     }
 
+    const styleText = typeof style === "string" && style.trim() ? style.trim() : "post para redes sociais";
     const userText =
-      `Banner/post profissional para advocacia (Dra. Kênia Garcia). ` +
-      `Estilo cinematográfico, paleta nude/dourada, sem texto e sem letras. ` +
-      `Tema: ${prompt}.` +
+      `CENA PRINCIPAL EXATA: ${prompt}. ` +
+      `Mostre literalmente o que foi pedido, sem transformar em conceito abstrato. ` +
+      `Fotografia editorial fotorrealista para ${styleText} da Dra. Kênia Garcia, com estética jurídica elegante. ` +
+      `Se houver pessoas, use no máximo 1 ou 2 personagens principais, em plano médio, com rostos naturais, proporcionais e nítidos. ` +
+      `Mãos devem aparecer pouco ou com anatomia correta. Paleta nude/dourada sutil. Sem texto, sem letras e sem logotipos gerados. ` +
       (logo_base64 ? " Considere o logotipo enviado." : "") +
       (reference_image_base64 ? " Use a imagem de referência como inspiração visual." : "");
 
@@ -68,30 +71,53 @@ Deno.serve(async (req) => {
       `mãos com cinco dedos corretos, fotorrealismo profissional, alta resolução. ` +
       `EVITAR: rostos disformes, olhos tortos, faces borradas, traços derretidos, anatomia distorcida, mãos deformadas, aparência de IA.`;
 
-    // 1) PRIMÁRIO GRATUITO: Pollinations (flux). Evita falha 402 quando a conta está sem créditos.
-    try {
-      const seed = Math.floor(Math.random() * 1_000_000);
-      const polUrl =
-        `https://image.pollinations.ai/prompt/${encodeURIComponent(faceSafePrompt)}` +
-        `?width=1024&height=1024&nologo=true&enhance=true&model=flux&seed=${seed}`;
-      const polResp = await fetch(polUrl);
-      if (polResp.ok) {
-        const buf = new Uint8Array(await polResp.arrayBuffer());
-        let bin = "";
-        for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
-        const b64 = btoa(bin);
-        const dataUrl = `data:image/png;base64,${b64}`;
-        return new Response(
-          JSON.stringify({ image_data_url: dataUrl, b64_json: b64, provider: "pollinations", model: "flux" }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
+    const negativePrompt =
+      "deformed face, distorted face, blurry face, melted face, extra eyes, asymmetrical eyes, bad anatomy, " +
+      "deformed hands, extra fingers, missing fingers, duplicate people, low quality, text, watermark, logo";
+
+    // 1) PRIMÁRIO: Gemini direto, quando houver chave própria. Melhor fidelidade sem consumir créditos do gateway.
+    const geminiKey = Deno.env.get("GEMINI_API_KEY");
+    if (geminiKey) {
+      for (const model of ["gemini-2.5-flash-image-preview", "gemini-2.0-flash-preview-image-generation"]) {
+        try {
+          const parts: any[] = [{ text: `${faceSafePrompt}\n\nPrompt negativo: ${negativePrompt}` }];
+          if (refUrl) parts.push({ inline_data: { mime_type: "image/png", data: refUrl.split(",")[1] } });
+          if (logoUrl) parts.push({ inline_data: { mime_type: "image/png", data: logoUrl.split(",")[1] } });
+          const gResp = await fetch(
+            `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contents: [{ role: "user", parts }],
+                generationConfig: { responseModalities: ["TEXT", "IMAGE"] },
+              }),
+            },
+          );
+          const raw = await gResp.text();
+          if (gResp.ok) {
+            const data = JSON.parse(raw || "{}");
+            const partsOut = data?.candidates?.[0]?.content?.parts || [];
+            const imgPart = partsOut.find((p: any) => p?.inlineData?.data || p?.inline_data?.data);
+            const b64 = imgPart?.inlineData?.data || imgPart?.inline_data?.data;
+            if (b64) {
+              const dataUrl = `data:image/png;base64,${b64}`;
+              return new Response(
+                JSON.stringify({ image_data_url: dataUrl, b64_json: b64, provider: "gemini", model }),
+                { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+              );
+            }
+            errors.push(`${model}: empty response`);
+          } else {
+            errors.push(`${model}_${gResp.status}: ${raw.slice(0, 200)}`);
+          }
+        } catch (e) {
+          errors.push(`${model}: ${String(e)}`);
+        }
       }
-      errors.push(`pollinations_${polResp.status}`);
-    } catch (e) {
-      errors.push(`pollinations: ${String(e)}`);
     }
 
-    // 2) OPCIONAL: Lovable AI Gateway. Só usa se for solicitado para não derrubar por falta de créditos.
+    // 2) OPCIONAL: Lovable AI Gateway. Só usa se for explicitamente habilitado para não derrubar por falta de créditos.
     const usePaidGateway = Deno.env.get("ENABLE_PAID_IMAGE_GATEWAY") === "true";
     const lovableKey = usePaidGateway ? Deno.env.get("LOVABLE_API_KEY") : null;
     if (lovableKey) {
@@ -128,45 +154,28 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 3) FALLBACK: Gemini direto (rostos também bons, se houver chave própria configurada).
-    const geminiKey = Deno.env.get("GEMINI_API_KEY");
-    if (geminiKey) {
-      try {
-        const model = "gemini-2.5-flash-image";
-        const parts: any[] = [{ text: faceSafePrompt }];
-        if (refUrl) parts.push({ inline_data: { mime_type: "image/png", data: refUrl.split(",")[1] } });
-        if (logoUrl) parts.push({ inline_data: { mime_type: "image/png", data: logoUrl.split(",")[1] } });
-        const gResp = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ role: "user", parts }],
-              generationConfig: { responseModalities: ["IMAGE"] },
-            }),
-          },
+    // 3) FALLBACK GRATUITO: Pollinations (flux) com prompt mais restritivo.
+    try {
+      const seed = Math.floor(Math.random() * 1_000_000);
+      const polUrl =
+        `https://image.pollinations.ai/prompt/${encodeURIComponent(`${faceSafePrompt}\n\nNegative prompt: ${negativePrompt}`)}` +
+        `?width=1024&height=1024&nologo=true&enhance=true&model=flux&seed=${seed}` +
+        `&negative=${encodeURIComponent(negativePrompt)}&negative_prompt=${encodeURIComponent(negativePrompt)}`;
+      const polResp = await fetch(polUrl);
+      if (polResp.ok) {
+        const buf = new Uint8Array(await polResp.arrayBuffer());
+        let bin = "";
+        for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+        const b64 = btoa(bin);
+        const dataUrl = `data:image/png;base64,${b64}`;
+        return new Response(
+          JSON.stringify({ image_data_url: dataUrl, b64_json: b64, provider: "pollinations", model: "flux" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
-        const raw = await gResp.text();
-        if (gResp.ok) {
-          const data = JSON.parse(raw || "{}");
-          const partsOut = data?.candidates?.[0]?.content?.parts || [];
-          const imgPart = partsOut.find((p: any) => p?.inlineData?.data || p?.inline_data?.data);
-          const b64 = imgPart?.inlineData?.data || imgPart?.inline_data?.data;
-          if (b64) {
-            const dataUrl = `data:image/png;base64,${b64}`;
-            return new Response(
-              JSON.stringify({ image_data_url: dataUrl, b64_json: b64, provider: "gemini", model }),
-              { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-            );
-          }
-          errors.push("gemini: empty response");
-        } else {
-          errors.push(`gemini_${gResp.status}: ${raw.slice(0, 200)}`);
-        }
-      } catch (e) {
-        errors.push(`gemini: ${String(e)}`);
       }
+      errors.push(`pollinations_${polResp.status}`);
+    } catch (e) {
+      errors.push(`pollinations: ${String(e)}`);
     }
 
     // 4) ÚLTIMO RECURSO: SVG local.
