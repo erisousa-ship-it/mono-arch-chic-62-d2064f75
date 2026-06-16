@@ -728,6 +728,18 @@ app.post("/api/whatsapp/test-connection", auth, (_req, res) => {
   res.json({ connected: state.connected, provider: "baileys", state: connectionState(), error: state.lastError });
 });
 
+app.post("/api/whatsapp/send-direct", auth, async (req, res) => {
+  const jid = normalizePhoneToJid(req.body?.phone || req.body?.jid || req.body?.to);
+  const text = String(req.body?.text || req.body?.message || "").trim();
+  if (!jid || !text) return res.status(400).json({ delivered: false, error: "Informe telefone e mensagem." });
+  try {
+    await sendWhatsAppText(jid, text);
+    res.json({ delivered: true, provider: "baileys", to: jid });
+  } catch (e) {
+    res.status(503).json({ delivered: false, provider: "baileys", state: connectionState(), error: e.message });
+  }
+});
+
 app.get("/api/whatsapp/baileys/status", auth, (_req, res) => {
   const secondsWaiting = state.startingAt ? Math.floor((Date.now() - state.startingAt) / 1000) : 0;
   res.json({
