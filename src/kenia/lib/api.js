@@ -1400,19 +1400,27 @@ const staticPost = (url, body = {}) => {
   if (path === "/processes") return insertItem("processes", seedProcesses, "proc", body);
   if (path === "/creatives/generate") {
     return (async () => {
-      const topic = body.topic || body.title || body.prompt || "post jurídico";
+      const topicText = String(body.topic || body.prompt || "").trim();
+      const titleText = String(body.title || "").trim();
+      const topic = [
+        topicText || titleText || "post jurídico",
+        titleText && !topicText.toLowerCase().includes(titleText.toLowerCase()) ? `Contexto do título: ${titleText}` : "",
+      ].filter(Boolean).join(". ");
       const styleHint = `${body.network || "instagram"} ${body.format || "post"}${body.case_type ? ` — área ${body.case_type}` : ""}${body.tone ? `, tom ${body.tone}` : ""}`;
       let b64 = "";
       let genError = null;
       // 1) Fallback gratuito: Pollinations.ai direto do navegador (sem API key, sem crédito).
       try {
         // Coloca a CENA pedida pelo usuário em primeiro plano para a IA obedecer literalmente
-        // (ex.: "trabalhador sendo demitido" => mostra trabalhador sendo demitido).
+        // (ex.: "trabalhador demitido" => mostra uma demissão acontecendo, não um banner genérico).
         const polPrompt =
-          `Fotografia editorial cinematográfica, realista, mostrando literalmente a cena: ${topic}. ` +
-          `A cena deve ser claramente reconhecível e fiel ao tema descrito. ` +
-          `Iluminação profissional, composição para ${styleHint}, paleta nude/dourada sutil, ` +
-          `sem qualquer texto, letras ou logotipos na imagem.`;
+          `Literal realistic photo scene. The user's requested subject is: "${topic}". ` +
+          `Show this exact subject as the main visible scene, centered and unmistakable. ` +
+          `Convert legal/social topics into a concrete real-world situation with people, workplace/home/street/office context, emotions and action. ` +
+          `Do not create a generic law-office banner, abstract justice symbol, empty courtroom, decorative scales, random portrait or unrelated business photo. ` +
+          `If the subject is "trabalhador demitido" or similar, show a worker being dismissed: employee, manager/HR, documents/box, workplace, clear emotional moment. ` +
+          `Use Brazilian context, editorial documentary photography, professional lighting, elegant but subtle nude/gold color grading for ${styleHint}. ` +
+          `No readable text, no letters, no captions, no logo, no watermark, no speech bubbles, no poster layout.`;
         const seed = Math.floor(Math.random() * 1_000_000);
         const polUrl =
           `https://image.pollinations.ai/prompt/${encodeURIComponent(polPrompt)}` +
