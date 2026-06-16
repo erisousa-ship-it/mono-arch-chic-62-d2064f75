@@ -511,7 +511,16 @@ async function handleIncomingMessage(msg) {
         reply = `${reply}\n\nAnotei seus dados; a Dra. Kênia confirmará o horário em breve.`.trim();
       }
     }
-    if (!reply) reply = "Pode me confirmar essa informação, por favor?";
+    if (!reply && agendamento) {
+      const d = agendamento.data_agendamento || "";
+      const h = agendamento.horario_agendamento || "";
+      reply = d && h
+        ? `✅ Consulta confirmada para ${d} às ${h}. A Dra. Kênia confirmará em breve.`
+        : "✅ Recebi seus dados. A Dra. Kênia confirmará o horário em breve.";
+    }
+    if (!reply || !reply.trim()) {
+      reply = "Pode me confirmar essa informação, por favor?";
+    }
     await sendWhatsAppText(jid, reply, { quoted: msg });
     state.lastAutoReplyAt = Date.now();
     state.autoReplyCount += 1;
