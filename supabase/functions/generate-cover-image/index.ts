@@ -40,6 +40,9 @@ Deno.serve(async (req) => {
     let extractedTitle = "";
     const tMatch = prompt.match(/t[íi]tulo\s*[:\-]\s*([^\n]+)/i);
     if (tMatch) extractedTitle = tMatch[1].trim().replace(/["']/g, "").slice(0, 90);
+    let extractedSubtitle = "";
+    const sMatch = prompt.match(/subt[íi]tulo\s*[:\-]\s*([^\n]+)/i);
+    if (sMatch) extractedSubtitle = sMatch[1].trim().replace(/["']/g, "").slice(0, 140);
 
     const userText =
       `BRIEFING PARA IMAGEM EDITORIAL — PESQUISE REFERÊNCIAS VISUAIS REAIS antes de compor (campanhas oficiais, fotojornalismo, materiais institucionais brasileiros) e use-as APENAS como inspiração.\n\n` +
@@ -50,8 +53,11 @@ Deno.serve(async (req) => {
       `ESTILO: fotografia editorial fotorrealista, iluminação profissional, composição organizada, profundidade visual, texturas realistas, paleta nude/dourada sutil com estética jurídica elegante.\n` +
       `PERSONAGENS: no máximo 1 ou 2, em plano médio, rostos naturais, proporcionais, simétricos e nítidos; expressões coerentes com o tema; mãos com anatomia correta (cinco dedos) ou fora do quadro.\n` +
       (extractedTitle
-        ? `TÍTULO NA IMAGEM: inserir o texto "${extractedTitle}" com tipografia clara, legível, harmonizada à composição (sem erros de ortografia).\n`
+        ? `TÍTULO NA IMAGEM: inserir o texto "${extractedTitle}" com tipografia serifada elegante, grande, legível e harmonizada à composição (sem erros de ortografia).\n`
         : `SEM texto, letras ou logotipos gerados pela IA.\n`) +
+      (extractedSubtitle
+        ? `SUBTÍTULO NA IMAGEM: abaixo do título, em fonte menor e clara, inserir: "${extractedSubtitle}".\n`
+        : "") +
       (logo_base64 ? `Considere o logotipo enviado como referência de marca.\n` : "") +
       (reference_image_base64 ? `Use a imagem de referência enviada como inspiração visual.\n` : "");
 
