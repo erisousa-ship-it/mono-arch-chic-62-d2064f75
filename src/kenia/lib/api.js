@@ -1407,12 +1407,14 @@ const staticPost = (url, body = {}) => {
       // 1) Fallback gratuito: Pollinations.ai direto do navegador (sem API key, sem crédito).
       try {
         // Coloca a CENA pedida pelo usuário em primeiro plano para a IA obedecer literalmente
-        // (ex.: "trabalhador sendo demitido" => mostra trabalhador sendo demitido).
+        // (ex.: "trabalhador demitido" => mostra uma demissão acontecendo, não um banner genérico).
         const polPrompt =
-          `Fotografia editorial cinematográfica, realista, mostrando literalmente a cena: ${topic}. ` +
-          `A cena deve ser claramente reconhecível e fiel ao tema descrito. ` +
-          `Iluminação profissional, composição para ${styleHint}, paleta nude/dourada sutil, ` +
-          `sem qualquer texto, letras ou logotipos na imagem.`;
+          `Crie uma IMAGEM FOTOGRÁFICA REALISTA que represente literalmente este pedido do usuário: "${topic}". ` +
+          `O assunto principal deve aparecer de forma óbvia no centro da imagem; não gere imagem abstrata, genérica, simbólica ou apenas decorativa. ` +
+          `Se o pedido citar uma ação, mostre a ação acontecendo; se citar uma pessoa, situação ou objeto, mostre essa pessoa, situação ou objeto de modo reconhecível. ` +
+          `Exemplo de obediência: se o pedido for "trabalhador demitido", mostrar um trabalhador em ambiente profissional recebendo uma demissão de forma clara e humana. ` +
+          `Contexto visual secundário: advocacia brasileira, conteúdo para ${styleHint}, estética editorial elegante, iluminação profissional, paleta nude/dourada apenas como acabamento discreto. ` +
+          `Não incluir texto, letras, frases, placas legíveis, marcas, logotipos, balões de fala, molduras ou elementos que desviem do pedido principal.`;
         const seed = Math.floor(Math.random() * 1_000_000);
         const polUrl =
           `https://image.pollinations.ai/prompt/${encodeURIComponent(polPrompt)}` +
