@@ -491,23 +491,27 @@ async function generateAiReply(jid, text) {
     ...history,
   ];
 
-  const emergentReply = await callEmergentChat({ messages }).catch((e) => {
-    state.lastAiError = e.message;
+  // 1) Tenta Ollama direto primeiro (provedor preferido para WhatsApp)
+  const directReply = await generateDirectOllamaReply(messages).catch((e) => {
+    state.lastAiError = `ollama_direct: ${e.message}`;
+    console.warn("[whatsapp-ai] ollama direto falhou:", e.message);
     return null;
   });
-  if (emergentReply) {
-    const safeReply = sanitizeOutbound(emergentReply);
+  if (directReply) {
+    const safeReply = sanitizeOutbound(directReply);
     rememberMessage(jid, "assistant", safeReply);
     state.lastAiError = null;
     return safeReply;
   }
 
-  const directReply = await generateDirectOllamaReply(messages).catch((e) => {
-    state.lastAiError = e.message;
+  // 2) Fallback Emergent
+  const emergentReply = await callEmergentChat({ messages }).catch((e) => {
+    state.lastAiError = `emergent: ${e.message}`;
+    console.warn("[whatsapp-ai] emergent falhou:", e.message);
     return null;
   });
-  if (directReply) {
-    const safeReply = sanitizeOutbound(directReply);
+  if (emergentReply) {
+    const safeReply = sanitizeOutbound(emergentReply);
     rememberMessage(jid, "assistant", safeReply);
     state.lastAiError = null;
     return safeReply;
