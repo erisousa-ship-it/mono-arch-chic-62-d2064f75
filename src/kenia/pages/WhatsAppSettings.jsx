@@ -38,6 +38,8 @@ export default function WhatsAppSettings() {
   const [baileysStatus, setBaileysStatus] = useState(null);
   const [baileysQr, setBaileysQr] = useState(null);
   const [baileysLoggingOut, setBaileysLoggingOut] = useState(false);
+  const [evoTesting, setEvoTesting] = useState(false);
+  const [evoResult, setEvoResult] = useState(null);
 
   const backendUrl = getBackendUrl();
   const webhookBase = `${backendUrl}/api/whatsapp/webhook`;
