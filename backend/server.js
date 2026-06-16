@@ -202,7 +202,7 @@ const createSupabaseAppointment = async (jid, payload) => {
 
 const connectionState = () => {
   if (state.connected) return "open";
-  if (state.qrDataUrl) return "qr";
+  if (state.qrDataUrl || state.qr) return "qr";
   if (state.lastError) return "offline";
   return "connecting";
 };
@@ -877,7 +877,8 @@ app.get("/api/whatsapp/baileys/status", auth, (_req, res) => {
   res.json({
     connected: state.connected,
     state: connectionState(),
-    hasQr: !!state.qrDataUrl,
+    hasQr: !!(state.qrDataUrl || state.qr),
+    hasRawQr: !!state.qr,
     startingAt: state.startingAt,
     secondsWaiting,
     last_error: state.lastError,
@@ -906,7 +907,7 @@ app.get("/api/whatsapp/baileys/qr", auth, (_req, res) => {
 app.post("/api/whatsapp/baileys/restart", auth, async (_req, res) => {
   try {
     await startSock();
-    res.json({ ok: true, connected: state.connected, state: connectionState(), qr: state.qrDataUrl });
+    res.json({ ok: true, connected: state.connected, state: connectionState(), qr: state.qrDataUrl, raw: state.qr });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -915,7 +916,7 @@ app.post("/api/whatsapp/baileys/restart", auth, async (_req, res) => {
 app.post("/api/whatsapp/baileys/reconnect", auth, async (_req, res) => {
   try {
     await startSock();
-    res.json({ ok: true, connected: state.connected, state: connectionState(), qr: state.qrDataUrl });
+    res.json({ ok: true, connected: state.connected, state: connectionState(), qr: state.qrDataUrl, raw: state.qr });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -925,7 +926,7 @@ app.post("/api/whatsapp/baileys/reset-session", auth, async (_req, res) => {
   try {
     state.qrAttempts = 0;
     await startSock({ clearAuth: true });
-    res.json({ ok: true, connected: false, state: connectionState(), qr: state.qrDataUrl });
+    res.json({ ok: true, connected: false, state: connectionState(), qr: state.qrDataUrl, raw: state.qr });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -937,8 +938,9 @@ app.post("/api/whatsapp/baileys/logout", auth, async (_req, res) => {
     state.connected = false;
     state.qr = null;
     state.qrDataUrl = null;
-    await startSock();
-    res.json({ ok: true, connected: false, state: "connecting" });
+    state.qrAttempts = 0;
+    await startSock({ clearAuth: true });
+    res.json({ ok: true, connected: false, state: connectionState(), qr: state.qrDataUrl, raw: state.qr });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -950,7 +952,8 @@ app.post("/api/whatsapp/logout", auth, async (_req, res) => {
     state.connected = false;
     state.qr = null;
     state.qrDataUrl = null;
-    res.json({ ok: true });
+    await resetAuthSession();
+    res.json({ ok: true, connected: false, state: connectionState() });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
