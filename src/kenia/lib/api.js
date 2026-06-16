@@ -1438,8 +1438,9 @@ const staticPost = (url, body = {}) => {
       }
       }
 
-      // 2) Função de imagem com qualidade superior. Ela própria evita gateway pago sem créditos e faz fallback seguro.
-      if (!b64) {
+      // 2) Função de imagem com qualidade superior opcional.
+      // Por padrão NÃO chamamos a edge function porque ela pode consumir gateway pago e retornar 402.
+      if (!b64 && body.use_quality_edge_function) {
       try {
         const { data, error } = await supabase.functions.invoke("generate-cover-image", {
           body: {

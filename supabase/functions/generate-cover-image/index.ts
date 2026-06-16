@@ -9,15 +9,6 @@ const toDataUrl = (b64?: string | null) => {
   return b64.startsWith("data:") ? b64 : `data:image/png;base64,${b64}`;
 };
 
-const parseImageResponse = (data: any) => {
-  const imageUrl: string | undefined =
-    data?.choices?.[0]?.message?.images?.[0]?.image_url?.url ||
-    data?.choices?.[0]?.message?.image_url?.url ||
-    data?.data?.[0]?.url;
-  const rawB64: string | undefined = data?.data?.[0]?.b64_json || data?.image_base64 || data?.b64_json;
-  return imageUrl || (rawB64 ? (rawB64.startsWith("data:") ? rawB64 : `data:image/png;base64,${rawB64}`) : "");
-};
-
 const escapeSvg = (value: string) =>
   String(value || "")
     .replace(/&/g, "&amp;")
@@ -117,44 +108,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 2) OPCIONAL: Lovable AI Gateway. Só usa se for explicitamente habilitado para não derrubar por falta de créditos.
-    const usePaidGateway = Deno.env.get("ENABLE_PAID_IMAGE_GATEWAY") === "true";
-    const lovableKey = usePaidGateway ? Deno.env.get("LOVABLE_API_KEY") : null;
-    if (lovableKey) {
-      try {
-        const resp = await fetch("https://ai.gateway.lovable.dev/v1/images/generations", {
-          method: "POST",
-          headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({
-            model: "openai/gpt-image-2",
-            prompt: faceSafePrompt,
-            quality: "low",
-            size: "1024x1024",
-            n: 1,
-          }),
-        });
-        const raw = await resp.text();
-        if (resp.ok) {
-          const data = JSON.parse(raw || "{}");
-          const dataUrl = parseImageResponse(data);
-          if (dataUrl) {
-            const b64Only = dataUrl.startsWith("data:") ? dataUrl.split(",")[1] : dataUrl;
-            return new Response(JSON.stringify({ image_data_url: dataUrl, b64_json: b64Only, provider: "lovable", model: "openai/gpt-image-2" }), {
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
-          }
-          errors.push("lovable: empty response");
-        } else if (resp.status === 402) {
-          errors.push("lovable_402: créditos indisponíveis; fallback gratuito usado");
-        } else {
-          errors.push(`lovable_${resp.status}: ${raw.slice(0, 200)}`);
-        }
-      } catch (e) {
-        errors.push(`lovable: ${String(e)}`);
-      }
-    }
-
-    // 3) FALLBACK GRATUITO: Pollinations (flux) com prompt mais restritivo.
+    // 2) FALLBACK GRATUITO: Pollinations (flux) com prompt mais restritivo.
     try {
       const seed = Math.floor(Math.random() * 1_000_000);
       const polUrl =
