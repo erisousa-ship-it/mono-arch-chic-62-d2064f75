@@ -1,24 +1,32 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * DebugErrorThrower
  *
- * Componente sem UI. Escuta o evento "lovable-debug-error" sem quebrar a
- * aplicação. Esses eventos podem conter texto digitado pelo usuário e não
- * devem causar tela branca no app.
+ * Componente sem UI. Escuta o evento "lovable-debug-error" e, durante o
+ * render, lança um erro fatal real para acionar o overlay global da Lovable.
+ * Esse throw é INTENCIONAL — não remover, não envolver em try/catch nem em
+ * ErrorBoundary. O fluxo correto é: Popup -> CustomEvent -> state -> throw
+ * -> overlay global -> usuário clica em "Try to Fix".
  */
 export const DebugErrorThrower = () => {
+  const [message, setMessage] = useState<string | null>(null);
+
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<string>).detail;
       if (typeof detail === "string" && detail.length > 0) {
-        console.warn("lovable-debug-error ignored:", detail);
+        setMessage(detail);
       }
     };
     window.addEventListener("lovable-debug-error", handler as EventListener);
     return () =>
       window.removeEventListener("lovable-debug-error", handler as EventListener);
   }, []);
+
+  if (message) {
+    throw new Error(message);
+  }
 
   return null;
 };
