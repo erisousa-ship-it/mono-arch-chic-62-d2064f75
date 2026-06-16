@@ -43,6 +43,13 @@ const inDays = (days) => {
   return d.toISOString();
 };
 
+const escapeSvgText = (value) => String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const makeLocalCreativeImage = (topic = "post jurídico") => {
+  const title = escapeSvgText(topic).slice(0, 86);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f7efe8"/><stop offset="0.52" stop-color="#d8b980"/><stop offset="1" stop-color="#1d1714"/></linearGradient><radialGradient id="light" cx="32%" cy="24%" r="58%"><stop offset="0" stop-color="#fffaf3" stop-opacity="0.95"/><stop offset="1" stop-color="#fffaf3" stop-opacity="0"/></radialGradient></defs><rect width="1024" height="1024" fill="url(#bg)"/><rect width="1024" height="1024" fill="url(#light)"/><path d="M148 228h728v568H148z" fill="none" stroke="#fff7e8" stroke-width="5" opacity="0.72"/><path d="M512 286l88 306H424l88-306z" fill="#2b211b" opacity="0.82"/><path d="M350 626h324M392 690h240" stroke="#fff1d0" stroke-width="18" stroke-linecap="round" opacity="0.86"/><circle cx="512" cy="246" r="35" fill="#fff1d0"/><text x="512" y="820" text-anchor="middle" font-family="Georgia, serif" font-size="42" fill="#fff7e8">Dra. Kênia Garcia</text><text x="512" y="874" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#fff7e8" opacity="0.9">${title}</text></svg>`;
+  return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
+};
+
 const SECRETARIA_JURIDICA_PROMPT = `# SECRETÁRIA JURÍDICA DA DRA. KÊNIA GARCIA
 
 Você é a secretária pessoal da Dra. Kênia Garcia e realiza atendimento pelo WhatsApp.
@@ -1389,35 +1396,32 @@ const staticPost = (url, body = {}) => {
       const styleHint = `${body.network || "instagram"} ${body.format || "post"}${body.case_type ? ` — área ${body.case_type}` : ""}${body.tone ? `, tom ${body.tone}` : ""}`;
       let b64 = "";
       let genError = null;
-      // 1) Lovable AI via Supabase edge function (LOVABLE_API_KEY nativo, sem config no Render).
+      // 1) Fallback gratuito: Pollinations.ai direto do navegador (sem API key, sem crédito).
       try {
-        const { data, error } = await supabase.functions.invoke("generate-cover-image", {
-          body: {
-            prompt: topic,
-            style: styleHint,
-            reference_image_base64: body.reference_image_base64 || null,
-            logo_base64: body.logo_base64 || null,
-          },
-        });
-        if (error) {
-          let detail = error?.message || String(error);
-          try {
-            const ctxJson = await error?.context?.json?.();
-            if (ctxJson?.error) detail = typeof ctxJson.error === "string" ? ctxJson.error : JSON.stringify(ctxJson.error);
-            if (ctxJson?.upstream_status === 402 || /not enough credits|payment_required/i.test(detail)) {
-              detail = "Créditos da Lovable AI esgotados. Recarregue em Configurações → Cloud & AI balance.";
-            }
-          } catch { /* ignore */ }
-          genError = detail;
-          throw new Error(detail);
+        const polPrompt =
+          `Banner profissional para advocacia (Dra. Kênia Garcia), estilo cinematográfico, ` +
+          `paleta nude/dourada, sem texto e sem letras. Tema: ${topic}. Estilo: ${styleHint}.`;
+        const seed = Math.floor(Math.random() * 1_000_000);
+        const polUrl =
+          `https://image.pollinations.ai/prompt/${encodeURIComponent(polPrompt)}` +
+          `?width=1024&height=1024&nologo=true&seed=${seed}`;
+        const polResp = await fetch(polUrl);
+        if (polResp.ok) {
+          const blob = await polResp.blob();
+          b64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(String(reader.result || ""));
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+          if (b64) genError = null;
+        } else {
+          genError = genError || `pollinations_${polResp.status}`;
         }
-        b64 = data?.image_data_url || data?.b64_json || "";
-        if (b64 && !b64.startsWith("data:")) b64 = `data:image/png;base64,${b64}`;
-        if (!b64 && data?.error) genError = data.error;
       } catch (e) {
         genError = genError || e?.message || String(e);
       }
-      // 2) Fallback: backend Render (caso a edge function falhe).
+      // 2) Backend Render (caso Pollinations falhe).
       if (!b64) {
         try {
           const res = await liveRequest("post", "/generate-image", {
@@ -1437,32 +1441,39 @@ const staticPost = (url, body = {}) => {
           genError = genError || e?.response?.data?.error || e?.message || String(e);
         }
       }
-      // 3) Fallback gratuito: Pollinations.ai direto do navegador (sem API key, sem crédito).
+      // 3) Lovable AI via Supabase edge function só como último recurso pago.
       if (!b64) {
         try {
-          const polPrompt =
-            `Banner profissional para advocacia (Dra. Kênia Garcia), estilo cinematográfico, ` +
-            `paleta nude/dourada, sem texto e sem letras. Tema: ${topic}. Estilo: ${styleHint}.`;
-          const seed = Math.floor(Math.random() * 1_000_000);
-          const polUrl =
-            `https://image.pollinations.ai/prompt/${encodeURIComponent(polPrompt)}` +
-            `?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
-          const polResp = await fetch(polUrl);
-          if (polResp.ok) {
-            const blob = await polResp.blob();
-            b64 = await new Promise((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onloadend = () => resolve(String(reader.result || ""));
-              reader.onerror = reject;
-              reader.readAsDataURL(blob);
-            });
-            if (b64) genError = null;
+          const { data, error } = await supabase.functions.invoke("generate-cover-image", {
+            body: {
+              prompt: topic,
+              style: styleHint,
+              reference_image_base64: body.reference_image_base64 || null,
+              logo_base64: body.logo_base64 || null,
+            },
+          });
+          if (error) {
+            let detail = error?.message || String(error);
+            try {
+              const ctxJson = await error?.context?.json?.();
+              if (ctxJson?.error) detail = typeof ctxJson.error === "string" ? ctxJson.error : JSON.stringify(ctxJson.error);
+              if (ctxJson?.upstream_status === 402 || /not enough credits|payment_required/i.test(detail)) {
+                detail = "Créditos da Lovable AI esgotados.";
+              }
+            } catch { /* ignore */ }
+            genError = genError || detail;
           } else {
-            genError = genError || `pollinations_${polResp.status}`;
+            b64 = data?.image_data_url || data?.b64_json || "";
+            if (b64 && !b64.startsWith("data:")) b64 = `data:image/png;base64,${b64}`;
+            if (!b64 && data?.error) genError = genError || data.error;
           }
         } catch (e) {
           genError = genError || e?.message || String(e);
         }
+      }
+      if (!b64) {
+        b64 = makeLocalCreativeImage(topic);
+        genError = null;
       }
       const item = {
         id: nextId("creative"),

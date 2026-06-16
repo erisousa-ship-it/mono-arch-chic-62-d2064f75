@@ -18,6 +18,20 @@ const parseImageResponse = (data: any) => {
   return imageUrl || (rawB64 ? (rawB64.startsWith("data:") ? rawB64 : `data:image/png;base64,${rawB64}`) : "");
 };
 
+const escapeSvg = (value: string) =>
+  String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
+const makeLocalCreativeImage = (prompt: string) => {
+  const title = escapeSvg(prompt).slice(0, 86);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f7efe8"/><stop offset="0.52" stop-color="#d8b980"/><stop offset="1" stop-color="#1d1714"/></linearGradient><radialGradient id="light" cx="32%" cy="24%" r="58%"><stop offset="0" stop-color="#fffaf3" stop-opacity="0.95"/><stop offset="1" stop-color="#fffaf3" stop-opacity="0"/></radialGradient></defs><rect width="1024" height="1024" fill="url(#bg)"/><rect width="1024" height="1024" fill="url(#light)"/><path d="M148 228h728v568H148z" fill="none" stroke="#fff7e8" stroke-width="5" opacity="0.72"/><path d="M512 286l88 306H424l88-306z" fill="#2b211b" opacity="0.82"/><path d="M350 626h324M392 690h240" stroke="#fff1d0" stroke-width="18" stroke-linecap="round" opacity="0.86"/><circle cx="512" cy="246" r="35" fill="#fff1d0"/><text x="512" y="820" text-anchor="middle" font-family="Georgia, serif" font-size="42" fill="#fff7e8">Dra. Kênia Garcia</text><text x="512" y="874" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#fff7e8" opacity="0.9">${title}</text></svg>`;
+  const b64 = btoa(unescape(encodeURIComponent(svg)));
+  return { dataUrl: `data:image/svg+xml;base64,${b64}`, b64 };
+};
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
@@ -45,13 +59,43 @@ Deno.serve(async (req) => {
 
     const errors: string[] = [];
 
-    // 1) PRIMÁRIO: Lovable AI Gateway (Nano Banana / gpt-image-2)
+    // 1) PRIMÁRIO GRATUITO: Pollinations.ai (sem API key, sem crédito)
+    // Mantido antes dos provedores pagos para nunca quebrar com 402 de créditos.
+    try {
+      const seed = Math.floor(Math.random() * 1_000_000);
+      const polUrl =
+        `https://image.pollinations.ai/prompt/${encodeURIComponent(userText)}` +
+        `?width=1024&height=1024&nologo=true&seed=${seed}`;
+      const polResp = await fetch(polUrl);
+      if (polResp.ok) {
+        const buf = new Uint8Array(await polResp.arrayBuffer());
+        let bin = "";
+        for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+        const b64 = btoa(bin);
+        const dataUrl = `data:image/png;base64,${b64}`;
+        return new Response(
+          JSON.stringify({ image_data_url: dataUrl, b64_json: b64, provider: "pollinations", model: "default" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      errors.push(`pollinations_${polResp.status}`);
+    } catch (e) {
+      errors.push(`pollinations: ${String(e)}`);
+    }
+
+    const localImage = makeLocalCreativeImage(prompt);
+    return new Response(
+      JSON.stringify({ image_data_url: localImage.dataUrl, b64_json: localImage.b64, provider: "local-svg", model: "no-credit-fallback" }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+
+    // 2) FALLBACK: Lovable AI Gateway (Nano Banana / gpt-image-2)
     const lovableKey = Deno.env.get("LOVABLE_API_KEY");
     if (lovableKey) {
       try {
         const resp = await fetch("https://ai.gateway.lovable.dev/v1/images/generations", {
           method: "POST",
-          headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
+          headers: { "Lovable-API-Key": lovableKey, "Content-Type": "application/json" },
           body: JSON.stringify({
             model: "openai/gpt-image-2",
             prompt: userText,
@@ -82,7 +126,7 @@ Deno.serve(async (req) => {
       errors.push("Missing LOVABLE_API_KEY");
     }
 
-    // 2) FALLBACK: Emergent
+    // 3) FALLBACK: Emergent
     const emergentKey = Deno.env.get("EMERGENT_API_KEY");
     const emergentUrl = (Deno.env.get("EMERGENT_BASE_URL") || "https://api.emergent.sh/v1").replace(/\/+$/, "");
     if (emergentKey) {
@@ -111,7 +155,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 3) FALLBACK: Google Gemini (Nano Banana) direct API
+    // 4) FALLBACK: Google Gemini (Nano Banana) direct API
     const geminiKey = Deno.env.get("GEMINI_API_KEY");
     if (geminiKey) {
       try {
@@ -156,29 +200,6 @@ Deno.serve(async (req) => {
       } catch (e) {
         errors.push(`gemini: ${String(e)}`);
       }
-    }
-
-    // 4) FALLBACK GRATUITO: Pollinations.ai (sem API key, sem crédito)
-    try {
-      const seed = Math.floor(Math.random() * 1_000_000);
-      const polUrl =
-        `https://image.pollinations.ai/prompt/${encodeURIComponent(userText)}` +
-        `?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
-      const polResp = await fetch(polUrl);
-      if (polResp.ok) {
-        const buf = new Uint8Array(await polResp.arrayBuffer());
-        let bin = "";
-        for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
-        const b64 = btoa(bin);
-        const dataUrl = `data:image/png;base64,${b64}`;
-        return new Response(
-          JSON.stringify({ image_data_url: dataUrl, b64_json: b64, provider: "pollinations", model: "flux" }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      }
-      errors.push(`pollinations_${polResp.status}`);
-    } catch (e) {
-      errors.push(`pollinations: ${String(e)}`);
     }
 
     return new Response(JSON.stringify({ error: errors.join(" | ") || "Sem provedor de imagem disponível" }), {
