@@ -38,6 +38,8 @@ export default function WhatsAppSettings() {
   const [baileysStatus, setBaileysStatus] = useState(null);
   const [baileysQr, setBaileysQr] = useState(null);
   const [baileysLoggingOut, setBaileysLoggingOut] = useState(false);
+  const [evoTesting, setEvoTesting] = useState(false);
+  const [evoResult, setEvoResult] = useState(null);
 
   const backendUrl = getBackendUrl();
   const webhookBase = `${backendUrl}/api/whatsapp/webhook`;
@@ -859,6 +861,58 @@ export default function WhatsAppSettings() {
                 <div><Label>URL Base</Label><Input placeholder="https://sua-evolution.up.railway.app" value={cfg.evo_base_url || ""} onChange={(e) => up("evo_base_url", e.target.value)} data-testid="evo-url" /></div>
                 <div><Label>API Key</Label><Input value={cfg.evo_api_key || ""} onChange={(e) => up("evo_api_key", e.target.value)} data-testid="evo-key" className="font-mono text-xs" /></div>
                 <div><Label>Nome da Instância</Label><Input placeholder="meu-escritorio" value={cfg.evo_instance || ""} onChange={(e) => up("evo_instance", e.target.value)} data-testid="evo-instance" /></div>
+                <div className="flex items-center gap-2 pt-1">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={evoTesting || !cfg.evo_base_url || !cfg.evo_api_key || !cfg.evo_instance}
+                    onClick={async () => {
+                      setEvoTesting(true);
+                      setEvoResult(null);
+                      const base = String(cfg.evo_base_url || "").replace(/\/$/, "");
+                      const inst = encodeURIComponent(cfg.evo_instance || "");
+                      const url = `${base}/instance/connectionState/${inst}`;
+                      const started = Date.now();
+                      try {
+                        const ctl = new AbortController();
+                        const t = setTimeout(() => ctl.abort(), 12000);
+                        const r = await fetch(url, {
+                          method: "GET",
+                          headers: { apikey: cfg.evo_api_key, "Content-Type": "application/json" },
+                          signal: ctl.signal,
+                        });
+                        clearTimeout(t);
+                        const text = await r.text();
+                        let body; try { body = JSON.parse(text); } catch { body = text; }
+                        const state = body?.instance?.state || body?.state || (r.ok ? "ok" : "erro");
+                        setEvoResult({ ok: r.ok, status: r.status, ms: Date.now() - started, state, body });
+                        if (r.ok) toast.success(`Evolution respondeu: ${state} (${Date.now() - started}ms)`);
+                        else toast.error(`Evolution HTTP ${r.status}`);
+                      } catch (e) {
+                        const msg = e?.name === "AbortError" ? "timeout (12s)" : (e?.message || String(e));
+                        setEvoResult({ ok: false, error: msg, ms: Date.now() - started });
+                        toast.error("Falha ao conectar: " + msg);
+                      } finally {
+                        setEvoTesting(false);
+                      }
+                    }}
+                    data-testid="evo-test-btn"
+                  >
+                    {evoTesting ? <Loader2 className="w-3 h-3 mr-1 animate-spin" /> : <Activity className="w-3 h-3 mr-1" />}
+                    Testar conexão Evolution
+                  </Button>
+                  {evoResult && (
+                    <span className={`text-xs ${evoResult.ok ? "text-green-700" : "text-red-700"}`}>
+                      {evoResult.ok ? `✓ ${evoResult.state} • ${evoResult.ms}ms` : `✕ ${evoResult.error || `HTTP ${evoResult.status}`}`}
+                    </span>
+                  )}
+                </div>
+                {evoResult?.body && (
+                  <pre className="text-[10px] bg-nude-50 border border-nude-200 rounded p-2 overflow-auto max-h-40 font-mono text-nude-700">
+{typeof evoResult.body === "string" ? evoResult.body.slice(0, 1000) : JSON.stringify(evoResult.body, null, 2).slice(0, 1500)}
+                  </pre>
+                )}
               </TabsContent>
 
               <TabsContent value="meta" className="mt-5 space-y-3">
