@@ -1464,19 +1464,32 @@ const staticPost = (url, body = {}) => {
         return hit ? hit.scene : `cena realista e literal representando: ${raw}`;
       };
       const sceneDescription = expandScene(topic);
+      // Constrói um prompt fotográfico realista, descritivo e fiel ao que foi pedido.
+      const buildRealisticPrompt = () => {
+        const network = (body.network || "instagram").toString();
+        const format = (body.format || "post").toString();
+        const tone = (body.tone || "profissional").toString();
+        const caseType = body.case_type ? `, contexto de Direito ${body.case_type}` : "";
+        const aspect = /story|reels|tiktok/i.test(format) ? "9:16 vertical" : "1:1 quadrado";
+        return (
+          `Fotografia editorial fotorrealista, cinematográfica, para ${network} (${format}, ${aspect})${caseType}, tom ${tone}.\n` +
+          `TÍTULO DO POST: "${title}".\n` +
+          `TEMA/PEDIDO LITERAL DO USUÁRIO: "${topic}".\n` +
+          `CENA A REPRESENTAR (fiel e reconhecível): ${sceneDescription}.\n` +
+          `Personagens brasileiros reais, plano médio, no máximo 1 ou 2 pessoas, expressões coerentes com o tema, ` +
+          `rostos nítidos e simétricos, olhos em foco, anatomia correta (5 dedos), pele com textura natural, ` +
+          `roupas e ambiente compatíveis com o contexto descrito. ` +
+          `Iluminação profissional suave, lente 50mm f/2.8, profundidade de campo, alta resolução 8k, ` +
+          `paleta nude/dourada sutil com estética jurídica elegante, composição organizada com espaço para texto. ` +
+          `Sem qualquer texto, letras, números ou logotipos gerados na imagem.`
+        );
+      };
       let b64 = "";
       let genError = null;
       // 1) Provedor rápido opcional. Por padrão pulamos para usar a função com filtros melhores contra deformações.
       if (body.use_fast_free_provider) {
       try {
-        const polPrompt =
-          `Fotografia editorial cinematográfica, ultra realista, mostrando literalmente a cena: ${topic}. ` +
-          `A cena deve ser claramente reconhecível e fiel ao tema descrito. ` +
-          `Rostos nítidos, em foco perfeito, traços faciais bem definidos, olhos nítidos, pele detalhada, ` +
-          `lente 50mm f/2.8, foco preciso no rosto, sem desfoque facial, alta definição 8k, sharp focus on faces. ` +
-          `Iluminação profissional, composição para ${styleHint}, paleta nude/dourada sutil, ` +
-          `sem qualquer texto, letras ou logotipos na imagem. ` +
-          `Negative: blurry face, out of focus face, distorted face, deformed eyes, low quality, pixelated, smudged features.`;
+        const polPrompt = buildRealisticPrompt();
         const seed = Math.floor(Math.random() * 1_000_000);
         const polUrl =
           `https://image.pollinations.ai/prompt/${encodeURIComponent(polPrompt)}` +
@@ -1532,16 +1545,8 @@ const staticPost = (url, body = {}) => {
       // 3) Fallback gratuito: Pollinations.ai (flux) direto do navegador.
       if (!b64) {
       try {
-        // Prompt enriquecido: TÍTULO + CENA DETALHADA + estilo, para o gerador obedecer literalmente.
-        const polPrompt =
-          `[TÍTULO: ${title}] Fotografia editorial cinematográfica ultra realista representando: ${sceneDescription}. ` +
-          `Tema literal pedido: "${topic}". A cena deve ser inequívoca e fiel ao título, com no máximo 1 ou 2 personagens principais. ` +
-          `Estilo de referência: fotojornalismo brasileiro contemporâneo, semelhante a imagens de banco como Getty Images / Unsplash. ` +
-          `Rostos nítidos, em foco perfeito, traços faciais bem definidos, olhos nítidos, pele detalhada, ` +
-          `lente 50mm f/2.8, plano médio, foco preciso no rosto, sem close-up extremo, sem desfoque facial, alta definição 8k, sharp focus on faces. ` +
-          `Iluminação profissional, composição para ${styleHint}, paleta nude/dourada sutil, ` +
-          `sem qualquer texto, letras ou logotipos na imagem. ` +
-          `Negative: blurry face, out of focus face, distorted face, deformed eyes, bad anatomy, extra fingers, deformed hands, duplicate people, low quality, pixelated, smudged features.`;
+        // Prompt realista construído dinamicamente a partir do título/tema/rede/tom.
+        const polPrompt = buildRealisticPrompt();
         const seed = Math.floor(Math.random() * 1_000_000);
         const polUrl =
           `https://image.pollinations.ai/prompt/${encodeURIComponent(polPrompt)}` +
