@@ -1005,7 +1005,46 @@ const read = (key, fallback) => {
     return clone(fallback);
   }
 };
-const write = (key, value) => localStorage.setItem(`static_api_${key}`, JSON.stringify(value));
+const write = (key, value) => {
+  const trySet = (val) => localStorage.setItem(`static_api_${key}`, JSON.stringify(val));
+  try {
+    trySet(value);
+  } catch (err) {
+    // Quota excedida (provavelmente imagens base64 grandes em "creatives").
+    // Estratégia: reduzir progressivamente — remover image_b64 dos itens mais antigos
+    // e limitar a quantidade de itens mantidos no cache local.
+    try {
+      let v = value;
+      if (Array.isArray(v)) {
+        const stripBig = (item) => {
+          if (!item || typeof item !== "object") return item;
+          const out = { ...item };
+          if (typeof out.image_b64 === "string" && out.image_b64.length > 200_000) {
+            out.image_b64 = null;
+            out.image_truncated = true;
+          }
+          return out;
+        };
+        // primeiro: tira base64 dos itens mais antigos (mantém os 3 primeiros)
+        v = v.map((it, i) => (i < 3 ? it : stripBig(it)));
+        try { trySet(v); return; } catch {}
+        // segundo: corta lista para no máximo 12 itens
+        v = v.slice(0, 12);
+        try { trySet(v); return; } catch {}
+        // terceiro: tira base64 de todos
+        v = v.map(stripBig);
+        try { trySet(v); return; } catch {}
+        // último: mantém só metadados dos 6 mais recentes
+        v = v.slice(0, 6).map(stripBig);
+        try { trySet(v); return; } catch {}
+      }
+      // Sem como salvar — limpa a chave para não quebrar a UI.
+      try { localStorage.removeItem(`static_api_${key}`); } catch {}
+    } catch {
+      try { localStorage.removeItem(`static_api_${key}`); } catch {}
+    }
+  }
+};
 const response = (data, status = 200, headers = {}) => Promise.resolve({ data: clone(data), status, statusText: "OK", headers, config: {} });
 const sanitizeWhatsAppTextPayload = (payload) => {
   if (Array.isArray(payload)) return payload.map(sanitizeWhatsAppTextPayload);
