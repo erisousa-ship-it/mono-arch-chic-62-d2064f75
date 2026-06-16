@@ -79,8 +79,8 @@ export default function DebugTool() {
       const r = await fetch(`${WHATSAPP_BACKEND_URL}/api/ai/ping`, { headers: { "ngrok-skip-browser-warning": "true" } });
       const data = await r.json().catch(() => ({}));
       setWhatsappAiPing(data);
-      if (data?.chat_ok) toast.success("WhatsApp + Ollama OK");
-      else toast.error(data?.error || "Ollama não respondeu");
+      if (data?.chat_ok || data?.fallback_ok) toast.success("WhatsApp + IA OK");
+      else toast.error(data?.error || data?.fallback_error || "IA não respondeu");
     } catch (e) {
       const msg = e?.message || String(e);
       setWhatsappAiPing({ error: msg });
@@ -457,10 +457,12 @@ export default function DebugTool() {
                   </Button>
                 </div>
                 {whatsappAiPing && (
-                  <div className={`text-xs mt-2 ${whatsappAiPing.chat_ok ? "text-emerald-700" : "text-rose-600"}`}>
+                  <div className={`text-xs mt-2 ${whatsappAiPing.chat_ok || whatsappAiPing.fallback_ok ? "text-emerald-700" : "text-rose-600"}`}>
                     {whatsappAiPing.chat_ok
-                      ? `OK: ${whatsappAiPing.ollama_model} respondeu`
-                      : `Erro: ${whatsappAiPing.error || "sem resposta"}`}
+                      ? `OK: ${whatsappAiPing.ollama_model} respondeu direto`
+                      : whatsappAiPing.fallback_ok
+                        ? `OK: fallback ${whatsappAiPing.fallback_provider || "IA"} respondeu`
+                        : `Erro: ${whatsappAiPing.error || whatsappAiPing.fallback_error || "sem resposta"}`}
                     <div className="text-nude-500 mt-1">
                       URL pública: {whatsappAiPing.is_public ? "sim" : "não"} · Tags: {whatsappAiPing.tags_status || "—"}
                     </div>
@@ -521,7 +523,7 @@ export default function DebugTool() {
               <div className="mt-6 text-xs text-nude-500 space-y-1">
                 <div className="font-semibold text-nude-700">Como configurar Ollama:</div>
                 <ol className="list-decimal pl-5 space-y-1">
-                  <li>No seu PC: <code>ollama serve</code> e <code>ollama pull llama3.1</code></li>
+                  <li>No seu PC: <code>ollama serve</code> e <code>ollama pull qwen2.5:3b-instruct</code></li>
                   <li>Exponha com ngrok: <code>ngrok http 11434</code></li>
                   <li>Atualize o secret <code>OLLAMA_BASE_URL</code> com a URL do ngrok</li>
                   <li>Clique em "Testar" — deve retornar Ping OK.</li>
