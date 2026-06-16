@@ -68,8 +68,32 @@ Deno.serve(async (req) => {
       `mãos com cinco dedos corretos, fotorrealismo profissional, alta resolução. ` +
       `EVITAR: rostos disformes, olhos tortos, faces borradas, traços derretidos, anatomia distorcida, mãos deformadas, aparência de IA.`;
 
-    // 1) PRIMÁRIO: Lovable AI Gateway (gpt-image-2) — melhor qualidade facial.
-    const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+    // 1) PRIMÁRIO GRATUITO: Pollinations (flux). Evita falha 402 quando a conta está sem créditos.
+    try {
+      const seed = Math.floor(Math.random() * 1_000_000);
+      const polUrl =
+        `https://image.pollinations.ai/prompt/${encodeURIComponent(faceSafePrompt)}` +
+        `?width=1024&height=1024&nologo=true&enhance=true&model=flux&seed=${seed}`;
+      const polResp = await fetch(polUrl);
+      if (polResp.ok) {
+        const buf = new Uint8Array(await polResp.arrayBuffer());
+        let bin = "";
+        for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+        const b64 = btoa(bin);
+        const dataUrl = `data:image/png;base64,${b64}`;
+        return new Response(
+          JSON.stringify({ image_data_url: dataUrl, b64_json: b64, provider: "pollinations", model: "flux" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      errors.push(`pollinations_${polResp.status}`);
+    } catch (e) {
+      errors.push(`pollinations: ${String(e)}`);
+    }
+
+    // 2) OPCIONAL: Lovable AI Gateway. Só usa se for solicitado para não derrubar por falta de créditos.
+    const usePaidGateway = Deno.env.get("ENABLE_PAID_IMAGE_GATEWAY") === "true";
+    const lovableKey = usePaidGateway ? Deno.env.get("LOVABLE_API_KEY") : null;
     if (lovableKey) {
       try {
         const resp = await fetch("https://ai.gateway.lovable.dev/v1/images/generations", {
@@ -78,7 +102,7 @@ Deno.serve(async (req) => {
           body: JSON.stringify({
             model: "openai/gpt-image-2",
             prompt: faceSafePrompt,
-            quality: "medium",
+            quality: "low",
             size: "1024x1024",
             n: 1,
           }),
@@ -94,6 +118,8 @@ Deno.serve(async (req) => {
             });
           }
           errors.push("lovable: empty response");
+        } else if (resp.status === 402) {
+          errors.push("lovable_402: créditos indisponíveis; fallback gratuito usado");
         } else {
           errors.push(`lovable_${resp.status}: ${raw.slice(0, 200)}`);
         }
@@ -102,7 +128,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 2) FALLBACK: Gemini direto (rostos também bons).
+    // 3) FALLBACK: Gemini direto (rostos também bons, se houver chave própria configurada).
     const geminiKey = Deno.env.get("GEMINI_API_KEY");
     if (geminiKey) {
       try {
@@ -141,29 +167,6 @@ Deno.serve(async (req) => {
       } catch (e) {
         errors.push(`gemini: ${String(e)}`);
       }
-    }
-
-    // 3) FALLBACK GRATUITO: Pollinations (flux) com prompt face-safe.
-    try {
-      const seed = Math.floor(Math.random() * 1_000_000);
-      const polUrl =
-        `https://image.pollinations.ai/prompt/${encodeURIComponent(faceSafePrompt)}` +
-        `?width=1024&height=1024&nologo=true&enhance=true&model=flux&seed=${seed}`;
-      const polResp = await fetch(polUrl);
-      if (polResp.ok) {
-        const buf = new Uint8Array(await polResp.arrayBuffer());
-        let bin = "";
-        for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
-        const b64 = btoa(bin);
-        const dataUrl = `data:image/png;base64,${b64}`;
-        return new Response(
-          JSON.stringify({ image_data_url: dataUrl, b64_json: b64, provider: "pollinations", model: "flux" }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      }
-      errors.push(`pollinations_${polResp.status}`);
-    } catch (e) {
-      errors.push(`pollinations: ${String(e)}`);
     }
 
     // 4) ÚLTIMO RECURSO: SVG local.

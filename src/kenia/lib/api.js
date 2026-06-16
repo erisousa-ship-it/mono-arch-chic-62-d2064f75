@@ -1404,7 +1404,39 @@ const staticPost = (url, body = {}) => {
       const styleHint = `${body.network || "instagram"} ${body.format || "post"}${body.case_type ? ` — área ${body.case_type}` : ""}${body.tone ? `, tom ${body.tone}` : ""}`;
       let b64 = "";
       let genError = null;
-      // 1) PRIMÁRIO: Lovable AI Gateway (gpt-image-2) via edge function — qualidade facial superior.
+      // 1) PRIMÁRIO GRATUITO: Pollinations.ai (flux). Evita 402 por falta de créditos e mantém a tela funcionando.
+      try {
+        const polPrompt =
+          `Fotografia editorial cinematográfica, ultra realista, mostrando literalmente a cena: ${topic}. ` +
+          `A cena deve ser claramente reconhecível e fiel ao tema descrito. ` +
+          `Rostos nítidos, em foco perfeito, traços faciais bem definidos, olhos nítidos, pele detalhada, ` +
+          `lente 50mm f/2.8, foco preciso no rosto, sem desfoque facial, alta definição 8k, sharp focus on faces. ` +
+          `Iluminação profissional, composição para ${styleHint}, paleta nude/dourada sutil, ` +
+          `sem qualquer texto, letras ou logotipos na imagem. ` +
+          `Negative: blurry face, out of focus face, distorted face, deformed eyes, low quality, pixelated, smudged features.`;
+        const seed = Math.floor(Math.random() * 1_000_000);
+        const polUrl =
+          `https://image.pollinations.ai/prompt/${encodeURIComponent(polPrompt)}` +
+          `?width=1024&height=1024&nologo=true&enhance=true&model=flux&seed=${seed}`;
+        const polResp = await fetch(polUrl);
+        if (polResp.ok) {
+          const blob = await polResp.blob();
+          b64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(String(reader.result || ""));
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+          if (b64) genError = null;
+        } else {
+          genError = genError || `pollinations_${polResp.status}`;
+        }
+      } catch (e) {
+        genError = genError || e?.message || String(e);
+      }
+
+      // 2) OPCIONAL: função paga só quando explicitamente solicitada; evita chamar gateway sem créditos.
+      if (!b64 && body.use_paid_gateway) {
       try {
         const { data, error } = await supabase.functions.invoke("generate-cover-image", {
           body: {
@@ -1430,7 +1462,8 @@ const staticPost = (url, body = {}) => {
       } catch (e) {
         genError = genError || e?.message || String(e);
       }
-      // 2) Fallback gratuito: Pollinations.ai (flux) direto do navegador.
+      }
+      // 3) Fallback gratuito: Pollinations.ai (flux) direto do navegador.
       if (!b64) {
       try {
         // Coloca a CENA pedida pelo usuário em primeiro plano para a IA obedecer literalmente
