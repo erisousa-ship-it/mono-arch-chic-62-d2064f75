@@ -1406,13 +1406,17 @@ const staticPost = (url, body = {}) => {
       let genError = null;
       // 1) Fallback gratuito: Pollinations.ai direto do navegador (sem API key, sem crédito).
       try {
+        // Coloca a CENA pedida pelo usuário em primeiro plano para a IA obedecer literalmente
+        // (ex.: "trabalhador sendo demitido" => mostra trabalhador sendo demitido).
         const polPrompt =
-          `Banner profissional para advocacia (Dra. Kênia Garcia), estilo cinematográfico, ` +
-          `paleta nude/dourada, sem texto e sem letras. Tema: ${topic}. Estilo: ${styleHint}.`;
+          `Fotografia editorial cinematográfica, realista, mostrando literalmente a cena: ${topic}. ` +
+          `A cena deve ser claramente reconhecível e fiel ao tema descrito. ` +
+          `Iluminação profissional, composição para ${styleHint}, paleta nude/dourada sutil, ` +
+          `sem qualquer texto, letras ou logotipos na imagem.`;
         const seed = Math.floor(Math.random() * 1_000_000);
         const polUrl =
           `https://image.pollinations.ai/prompt/${encodeURIComponent(polPrompt)}` +
-          `?width=1024&height=1024&nologo=true&seed=${seed}`;
+          `?width=1024&height=1024&nologo=true&enhance=true&seed=${seed}`;
         const polResp = await fetch(polUrl);
         if (polResp.ok) {
           const blob = await polResp.blob();
