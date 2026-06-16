@@ -72,6 +72,8 @@ const state = {
   startingAt: 0,
   lastError: null,
   lastAiError: null,
+  lastAiProvider: null,
+  lastAiFailureChain: [],
   lastAutoReplyAt: null,
   autoReplyCount: 0,
   qrAttempts: 0,
@@ -454,7 +456,7 @@ const callEmergentChat = async ({ messages, key = "" }) => {
 async function generateDirectOllamaReply(messages) {
   if (!OLLAMA_BASE_URL) throw new Error("OLLAMA_BASE_URL não configurado no backend WhatsApp");
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 45000);
+  const timeout = setTimeout(() => controller.abort(), 25000);
   try {
     const r = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
       method: "POST",
@@ -470,6 +472,32 @@ async function generateDirectOllamaReply(messages) {
     return reply;
   } catch (e) {
     throw new Error(e?.name === "AbortError" ? "ollama_timeout" : e.message);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function generateAiRouterReply(messages) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 25000);
+  try {
+    const r = await fetch(AI_ROUTER_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(SUPABASE_ANON_KEY ? { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } : {}),
+      },
+      signal: controller.signal,
+      body: JSON.stringify({ mode: "chat", messages, model: OLLAMA_MODEL }),
+    });
+    const raw = await r.text();
+    if (!r.ok) throw new Error(`ai-router_${r.status}: ${raw.slice(0, 300)}`);
+    const data = JSON.parse(raw || "{}");
+    const reply = String(data.text || data.response || "").trim();
+    if (!reply) throw new Error("ai-router_empty_response");
+    return { provider: data.provider ? `ai-router:${data.provider}` : "ai-router", text: reply };
+  } catch (e) {
+    throw new Error(e?.name === "AbortError" ? "ai-router_timeout" : e.message);
   } finally {
     clearTimeout(timeout);
   }
@@ -491,59 +519,35 @@ async function generateAiReply(jid, text) {
     ...history,
   ];
 
-  // 1) Tenta Ollama direto primeiro (provedor preferido para WhatsApp)
-  const directReply = await generateDirectOllamaReply(messages).catch((e) => {
-    state.lastAiError = `ollama_direct: ${e.message}`;
-    console.warn("[whatsapp-ai] ollama direto falhou:", e.message);
-    return null;
-  });
-  if (directReply) {
-    const safeReply = sanitizeOutbound(directReply);
-    rememberMessage(jid, "assistant", safeReply);
-    state.lastAiError = null;
-    return safeReply;
+  const failures = [];
+  const providers = [
+    { name: "ollama_direct", run: () => generateDirectOllamaReply(messages) },
+    { name: "emergent", run: async () => callEmergentChat({ messages }) },
+    { name: "ai-router", run: () => generateAiRouterReply(messages) },
+  ];
+
+  for (const item of providers) {
+    try {
+      const out = await item.run();
+      const provider = typeof out === "object" ? out.provider || item.name : item.name;
+      const rawText = typeof out === "object" ? out.text : out;
+      const safeReply = sanitizeOutbound(String(rawText || "").trim());
+      if (!safeReply) throw new Error("empty_response");
+      rememberMessage(jid, "assistant", safeReply);
+      state.lastAiError = null;
+      state.lastAiProvider = provider;
+      state.lastAiFailureChain = failures;
+      return safeReply;
+    } catch (e) {
+      const entry = `${item.name}: ${e.message}`;
+      failures.push(entry);
+      state.lastAiError = failures.join(" | ");
+      state.lastAiFailureChain = failures;
+      console.warn(`[whatsapp-ai] ${item.name} falhou:`, e.message);
+    }
   }
 
-  // 2) Fallback Emergent
-  const emergentReply = await callEmergentChat({ messages }).catch((e) => {
-    state.lastAiError = `emergent: ${e.message}`;
-    console.warn("[whatsapp-ai] emergent falhou:", e.message);
-    return null;
-  });
-  if (emergentReply) {
-    const safeReply = sanitizeOutbound(emergentReply);
-    rememberMessage(jid, "assistant", safeReply);
-    state.lastAiError = null;
-    return safeReply;
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25000);
-  try {
-    const r = await fetch(AI_ROUTER_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(SUPABASE_ANON_KEY ? { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } : {}),
-      },
-      signal: controller.signal,
-      body: JSON.stringify({ mode: "chat", provider: "ollama", messages, model: OLLAMA_MODEL }),
-    });
-    const raw = await r.text();
-    if (!r.ok) throw new Error(`ai-router_${r.status}: ${raw.slice(0, 300)}`);
-    const data = JSON.parse(raw || "{}");
-    const reply = sanitizeOutbound(String(data.text || data.response || "").trim());
-    if (!reply) throw new Error("ai-router_empty_response");
-    rememberMessage(jid, "assistant", reply);
-    state.lastAiError = null;
-    return reply;
-  } catch (e) {
-    const msg = e?.name === "AbortError" ? "ai-router_timeout" : e.message;
-    state.lastAiError = msg;
-    throw new Error(msg);
-  } finally {
-    clearTimeout(timeout);
-  }
+  throw new Error(failures.join(" | ") || "no_ai_provider_available");
 }
 
 async function handleIncomingMessage(msg) {
