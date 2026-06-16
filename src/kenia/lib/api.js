@@ -1414,12 +1414,13 @@ const staticPost = (url, body = {}) => {
         // Coloca a CENA pedida pelo usuário em primeiro plano para a IA obedecer literalmente
         // (ex.: "trabalhador demitido" => mostra uma demissão acontecendo, não um banner genérico).
         const polPrompt =
-          `Crie uma IMAGEM FOTOGRÁFICA REALISTA que represente literalmente este pedido do usuário: "${topic}". ` +
-          `O assunto principal deve aparecer de forma óbvia no centro da imagem; não gere imagem abstrata, genérica, simbólica ou apenas decorativa. ` +
-          `Se o pedido citar uma ação, mostre a ação acontecendo; se citar uma pessoa, situação ou objeto, mostre essa pessoa, situação ou objeto de modo reconhecível. ` +
-          `Exemplo de obediência: se o pedido for "trabalhador demitido", mostrar um trabalhador em ambiente profissional recebendo uma demissão de forma clara e humana. ` +
-          `Contexto visual secundário: advocacia brasileira, conteúdo para ${styleHint}, estética editorial elegante, iluminação profissional, paleta nude/dourada apenas como acabamento discreto. ` +
-          `Não incluir texto, letras, frases, placas legíveis, marcas, logotipos, balões de fala, molduras ou elementos que desviem do pedido principal.`;
+          `Literal realistic photo scene. The user's requested subject is: "${topic}". ` +
+          `Show this exact subject as the main visible scene, centered and unmistakable. ` +
+          `Convert legal/social topics into a concrete real-world situation with people, workplace/home/street/office context, emotions and action. ` +
+          `Do not create a generic law-office banner, abstract justice symbol, empty courtroom, decorative scales, random portrait or unrelated business photo. ` +
+          `If the subject is "trabalhador demitido" or similar, show a worker being dismissed: employee, manager/HR, documents/box, workplace, clear emotional moment. ` +
+          `Use Brazilian context, editorial documentary photography, professional lighting, elegant but subtle nude/gold color grading for ${styleHint}. ` +
+          `No readable text, no letters, no captions, no logo, no watermark, no speech bubbles, no poster layout.`;
         const seed = Math.floor(Math.random() * 1_000_000);
         const polUrl =
           `https://image.pollinations.ai/prompt/${encodeURIComponent(polPrompt)}` +
