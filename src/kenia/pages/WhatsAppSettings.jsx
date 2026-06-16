@@ -26,6 +26,8 @@ export default function WhatsAppSettings() {
   const [loadingQr, setLoadingQr] = useState(false);
   const [sendTest, setSendTest] = useState({ phone: "", text: "Olá! Mensagem de teste LegalFlow." });
   const [sendingTest, setSendingTest] = useState(false);
+  const [testingOllamaReply, setTestingOllamaReply] = useState(false);
+  const [ollamaReplyTest, setOllamaReplyTest] = useState(null);
   const [settingWebhook, setSettingWebhook] = useState(false);
   const [webhookResult, setWebhookResult] = useState(null);
   const [diag, setDiag] = useState(null);
@@ -355,6 +357,24 @@ export default function WhatsAppSettings() {
       toast.error(e?.response?.data?.error || "Erro ao enviar teste");
     } finally {
       setSendingTest(false);
+    }
+  };
+
+  const doOllamaReplyTest = async () => {
+    setTestingOllamaReply(true);
+    setOllamaReplyTest(null);
+    try {
+      const payload = { text: sendTest.text, ...(sendTest.phone ? { phone: sendTest.phone } : {}) };
+      const { data } = await api.post("/whatsapp/test-ollama-reply", payload);
+      setOllamaReplyTest(data);
+      if (data.delivered) toast.success("Ollama respondeu e enviou no WhatsApp!");
+      else toast.success("Ollama respondeu corretamente.");
+    } catch (e) {
+      const data = e?.response?.data || { ok: false, error: e?.message || "Erro ao testar Ollama" };
+      setOllamaReplyTest(data);
+      toast.error(data.error || "Erro ao testar Ollama");
+    } finally {
+      setTestingOllamaReply(false);
     }
   };
 
