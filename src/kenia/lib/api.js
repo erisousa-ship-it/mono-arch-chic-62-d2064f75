@@ -1593,6 +1593,8 @@ const fallbackToStaticPostPaths = new Set([
   "/whatsapp/baileys/restart",
   "/whatsapp/baileys/logout",
   "/whatsapp/logout",
+  "/leads",
+  "/public/leads",
 ]);
 
 // Caminhos que, quando o backend live (Render) falha ou devolve lista vazia,
