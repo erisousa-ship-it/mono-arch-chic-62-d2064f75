@@ -1,32 +1,25 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 
 /**
  * DebugErrorThrower
  *
- * Componente sem UI. Escuta o evento "lovable-debug-error" e, durante o
- * render, lança um erro fatal real para acionar o overlay global da Lovable.
- * Esse throw é INTENCIONAL — não remover, não envolver em try/catch nem em
- * ErrorBoundary. O fluxo correto é: Popup -> CustomEvent -> state -> throw
- * -> overlay global -> usuário clica em "Try to Fix".
+ * Componente sem UI. Escuta o evento "lovable-debug-error" e registra a
+ * instrução sem quebrar a aplicação. Antes ele lançava um erro fatal de render,
+ * o que deixava a prévia em tela branca sempre que o admin enviava uma instrução.
  */
 export const DebugErrorThrower = () => {
-  const [message, setMessage] = useState<string | null>(null);
-
   useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent<string>).detail;
       if (typeof detail === "string" && detail.length > 0) {
-        setMessage(detail);
+        console.warn("[debug-instruction]", detail);
+        window.dispatchEvent(new CustomEvent("lovable-debug-instruction", { detail }));
       }
     };
     window.addEventListener("lovable-debug-error", handler as EventListener);
     return () =>
       window.removeEventListener("lovable-debug-error", handler as EventListener);
   }, []);
-
-  if (message) {
-    throw new Error(message);
-  }
 
   return null;
 };
