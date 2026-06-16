@@ -689,7 +689,10 @@ app.get("/api/ai/ping", async (_req, res) => {
     reachable: false,
     tags_status: null,
     chat_ok: false,
+    fallback_ok: false,
+    fallback_provider: null,
     error: null,
+    fallback_error: null,
   };
   if (!OLLAMA_BASE_URL) { result.error = "OLLAMA_BASE_URL não definido no Render"; return res.json(result); }
   try {
@@ -719,6 +722,15 @@ app.get("/api/ai/ping", async (_req, res) => {
     result.chat_ok = r.ok && !!(data?.message?.content);
     if (!result.chat_ok) result.error = `chat HTTP ${r.status}: ${data?.error || ""}`;
   } catch (e) { result.error = `chat: ${e.message}`; }
+  if (!result.chat_ok) {
+    try {
+      const fallback = await generateAiRouterReply([{ role: "user", content: "Responda apenas: ok" }]);
+      result.fallback_ok = !!fallback?.text;
+      result.fallback_provider = fallback?.provider || "ai-router";
+    } catch (e) {
+      result.fallback_error = e.message;
+    }
+  }
   res.json(result);
 });
 
@@ -789,7 +801,7 @@ app.put("/api/whatsapp/config", auth, (req, res) => {
 app.get("/api/whatsapp/diagnostics", auth, (_req, res) => {
   res.json({ ok: true, static_mode: false, checks: [
     { id: "baileys-backend", ok: true, label: "Backend Baileys ativo", msg: "Serviço WhatsApp publicado e respondendo.", hint: state.connected ? "WhatsApp conectado." : state.qrDataUrl ? "QR Code disponível para leitura." : "Se ficar inicializando por mais de 30s, gere uma nova sessão." },
-    { id: "ollama", ok: !state.lastAiError && (!!OLLAMA_BASE_URL || !!AI_ROUTER_URL), label: "Resposta automática IA", msg: state.lastAiError ? `Última falha: ${state.lastAiError}` : (OLLAMA_BASE_URL ? "Backend ligado direto ao Ollama." : "Backend ligado ao ai-router/Ollama."), hint: state.lastAutoReplyAt ? `Última resposta enviada: ${new Date(state.lastAutoReplyAt).toLocaleString("pt-BR")}` : "Envie uma mensagem para este WhatsApp para testar a resposta automática." },
+    { id: "auto-reply", ok: !state.lastAiError && (!!OLLAMA_BASE_URL || !!AI_ROUTER_URL || !!EMERGENT_API_KEY), label: "Resposta automática IA", msg: state.lastAiError ? `Última falha: ${state.lastAiError}` : `Último provedor OK: ${state.lastAiProvider || (OLLAMA_BASE_URL ? "ollama_direct" : "aguardando teste")}.`, hint: state.lastAutoReplyAt ? `Última resposta enviada: ${new Date(state.lastAutoReplyAt).toLocaleString("pt-BR")}` : "Envie uma mensagem para este WhatsApp para testar a resposta automática." },
   ] });
 });
 
@@ -811,6 +823,8 @@ app.get("/api/whatsapp/baileys/status", auth, (_req, res) => {
     ai_router_url: AI_ROUTER_URL,
     ollama_model: OLLAMA_MODEL,
     last_ai_error: state.lastAiError,
+    last_ai_provider: state.lastAiProvider,
+    last_ai_failure_chain: state.lastAiFailureChain,
     last_auto_reply_at: state.lastAutoReplyAt,
     auto_reply_count: state.autoReplyCount,
   });
