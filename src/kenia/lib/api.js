@@ -1418,7 +1418,8 @@ const staticPost = (url, body = {}) => {
         const seed = Math.floor(Math.random() * 1_000_000);
         const polUrl =
           `https://image.pollinations.ai/prompt/${encodeURIComponent(polPrompt)}` +
-          `?width=1024&height=1024&nologo=true&enhance=true&model=flux&seed=${seed}`;
+          `?width=1024&height=1024&nologo=true&enhance=true&model=flux&seed=${seed}` +
+          `&negative=${encodeURIComponent("blurry face, distorted face, bad anatomy, deformed hands, extra fingers, text, watermark")}`;
         const polResp = await fetch(polUrl);
         if (polResp.ok) {
           const blob = await polResp.blob();
@@ -1481,7 +1482,8 @@ const staticPost = (url, body = {}) => {
         const seed = Math.floor(Math.random() * 1_000_000);
         const polUrl =
           `https://image.pollinations.ai/prompt/${encodeURIComponent(polPrompt)}` +
-          `?width=1024&height=1024&nologo=true&enhance=true&model=flux&seed=${seed}`;
+          `?width=1024&height=1024&nologo=true&enhance=true&model=flux&seed=${seed}` +
+          `&negative=${encodeURIComponent("blurry face, distorted face, bad anatomy, deformed hands, extra fingers, text, watermark")}`;
         const polResp = await fetch(polUrl);
         if (polResp.ok) {
           const blob = await polResp.blob();
