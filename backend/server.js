@@ -262,15 +262,6 @@ const isReplyableJid = (jid = "") => {
   return jid.endsWith("@s.whatsapp.net") || jid.endsWith("@lid") || jid.endsWith("@g.us");
 };
 
-const normalizeWhatsAppJid = (phone = "") => {
-  const raw = String(phone || "").trim();
-  if (raw.endsWith("@s.whatsapp.net") || raw.endsWith("@g.us") || raw.endsWith("@lid")) return raw;
-  let digits = raw.replace(/\D/g, "");
-  if (!digits) return "";
-  if ((digits.length === 10 || digits.length === 11) && !digits.startsWith("55")) digits = `55${digits}`;
-  return `${digits}@s.whatsapp.net`;
-};
-
 const rememberMessage = (jid, role, content) => {
   const history = conversationHistory.get(jid) || [];
   history.push({ role, content: String(content || "").slice(0, 1200) });
@@ -500,58 +491,16 @@ async function generateAiReply(jid, text) {
     ...history,
   ];
 
-  // 1) Tenta Ollama direto primeiro (provedor preferido para WhatsApp)
-  const directReply = await generateDirectOllamaReply(messages).catch((e) => {
-    state.lastAiError = `ollama_direct: ${e.message}`;
-    console.warn("[whatsapp-ai] ollama direto falhou:", e.message);
-    return null;
-  });
-  if (directReply) {
-    const safeReply = sanitizeOutbound(directReply);
-    rememberMessage(jid, "assistant", safeReply);
-    state.lastAiError = null;
-    return safeReply;
-  }
-
-  // 2) Fallback Emergent
-  const emergentReply = await callEmergentChat({ messages }).catch((e) => {
-    state.lastAiError = `emergent: ${e.message}`;
-    console.warn("[whatsapp-ai] emergent falhou:", e.message);
-    return null;
-  });
-  if (emergentReply) {
-    const safeReply = sanitizeOutbound(emergentReply);
-    rememberMessage(jid, "assistant", safeReply);
-    state.lastAiError = null;
-    return safeReply;
-  }
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25000);
   try {
-    const r = await fetch(AI_ROUTER_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(SUPABASE_ANON_KEY ? { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } : {}),
-      },
-      signal: controller.signal,
-      body: JSON.stringify({ mode: "chat", provider: "ollama", messages, model: OLLAMA_MODEL }),
-    });
-    const raw = await r.text();
-    if (!r.ok) throw new Error(`ai-router_${r.status}: ${raw.slice(0, 300)}`);
-    const data = JSON.parse(raw || "{}");
-    const reply = sanitizeOutbound(String(data.text || data.response || "").trim());
-    if (!reply) throw new Error("ai-router_empty_response");
+    const reply = sanitizeOutbound(await generateDirectOllamaReply(messages));
     rememberMessage(jid, "assistant", reply);
     state.lastAiError = null;
     return reply;
   } catch (e) {
-    const msg = e?.name === "AbortError" ? "ai-router_timeout" : e.message;
+    const msg = `ollama_direct: ${e.message}`;
     state.lastAiError = msg;
+    console.warn("[whatsapp-ai] ollama direto falhou:", e.message);
     throw new Error(msg);
-  } finally {
-    clearTimeout(timeout);
   }
 }
 
@@ -794,49 +743,12 @@ app.put("/api/whatsapp/config", auth, (req, res) => {
 app.get("/api/whatsapp/diagnostics", auth, (_req, res) => {
   res.json({ ok: true, static_mode: false, checks: [
     { id: "baileys-backend", ok: true, label: "Backend Baileys ativo", msg: "Serviço WhatsApp publicado e respondendo.", hint: state.connected ? "WhatsApp conectado." : state.qrDataUrl ? "QR Code disponível para leitura." : "Se ficar inicializando por mais de 30s, gere uma nova sessão." },
-    { id: "ollama", ok: !state.lastAiError && (!!OLLAMA_BASE_URL || !!AI_ROUTER_URL), label: "Resposta automática IA", msg: state.lastAiError ? `Última falha: ${state.lastAiError}` : (OLLAMA_BASE_URL ? "Backend ligado direto ao Ollama." : "Backend ligado ao ai-router/Ollama."), hint: state.lastAutoReplyAt ? `Última resposta enviada: ${new Date(state.lastAutoReplyAt).toLocaleString("pt-BR")}` : "Envie uma mensagem para este WhatsApp para testar a resposta automática." },
+    { id: "ollama", ok: !state.lastAiError && !!OLLAMA_BASE_URL, label: "Resposta automática Ollama", msg: state.lastAiError ? `Última falha: ${state.lastAiError}` : (OLLAMA_BASE_URL ? "Backend ligado somente ao Ollama direto." : "OLLAMA_BASE_URL não configurado."), hint: state.lastAutoReplyAt ? `Última resposta enviada: ${new Date(state.lastAutoReplyAt).toLocaleString("pt-BR")}` : "Envie uma mensagem para este WhatsApp para testar a resposta automática." },
   ] });
 });
 
 app.post("/api/whatsapp/test-connection", auth, (_req, res) => {
   res.json({ connected: state.connected, provider: "baileys", state: connectionState(), error: state.lastError });
-});
-
-app.post("/api/whatsapp/send-direct", auth, async (req, res) => {
-  try {
-    const jid = normalizeWhatsAppJid(req.body?.phone || req.body?.jid || req.body?.to);
-    const text = String(req.body?.text || req.body?.message || "").trim();
-    if (!jid || !text) return res.status(400).json({ delivered: false, error: "Informe telefone e mensagem." });
-    if (!state.connected || !state.sock) return res.status(503).json({ delivered: false, error: "WhatsApp não conectado. Escaneie o QR Code primeiro." });
-    const providerResult = await state.sock.sendMessage(jid, { text });
-    res.json({ ok: true, delivered: true, provider: "baileys", jid, provider_result: providerResult });
-  } catch (e) {
-    res.status(500).json({ delivered: false, error: e.message });
-  }
-});
-
-app.post("/api/whatsapp/test-ollama-reply", auth, async (req, res) => {
-  try {
-    const prompt = String(req.body?.text || req.body?.prompt || "Olá, preciso de atendimento jurídico.").trim();
-    const messages = [
-      { role: "system", content: `${state.config.bot_prompt || DEFAULT_BOT_PROMPT}\n\n${buildTemporalSystemContext()}` },
-      { role: "user", content: prompt },
-    ];
-    const reply = sanitizeOutbound(await generateDirectOllamaReply(messages));
-    let delivery = null;
-    const jid = normalizeWhatsAppJid(req.body?.phone || req.body?.jid || req.body?.to);
-    if (jid) {
-      if (!state.connected || !state.sock) return res.status(503).json({ ok: false, provider: "ollama", reply, delivered: false, error: "Ollama respondeu, mas o WhatsApp não está conectado." });
-      delivery = await state.sock.sendMessage(jid, { text: reply });
-      state.lastAutoReplyAt = Date.now();
-      state.autoReplyCount += 1;
-    }
-    state.lastAiError = null;
-    res.json({ ok: true, provider: "ollama", model: OLLAMA_MODEL, reply, delivered: !!jid, jid: jid || null, provider_result: delivery });
-  } catch (e) {
-    state.lastAiError = `ollama_test: ${e.message}`;
-    res.status(500).json({ ok: false, provider: "ollama", model: OLLAMA_MODEL, error: e.message });
-  }
 });
 
 app.get("/api/whatsapp/baileys/status", auth, (_req, res) => {
