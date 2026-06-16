@@ -1409,14 +1409,17 @@ const staticPost = (url, body = {}) => {
         // Coloca a CENA pedida pelo usuário em primeiro plano para a IA obedecer literalmente
         // (ex.: "trabalhador sendo demitido" => mostra trabalhador sendo demitido).
         const polPrompt =
-          `Fotografia editorial cinematográfica, realista, mostrando literalmente a cena: ${topic}. ` +
+          `Fotografia editorial cinematográfica, ultra realista, mostrando literalmente a cena: ${topic}. ` +
           `A cena deve ser claramente reconhecível e fiel ao tema descrito. ` +
+          `Rostos nítidos, em foco perfeito, traços faciais bem definidos, olhos nítidos, pele detalhada, ` +
+          `lente 50mm f/2.8, foco preciso no rosto, sem desfoque facial, alta definição 8k, sharp focus on faces. ` +
           `Iluminação profissional, composição para ${styleHint}, paleta nude/dourada sutil, ` +
-          `sem qualquer texto, letras ou logotipos na imagem.`;
+          `sem qualquer texto, letras ou logotipos na imagem. ` +
+          `Negative: blurry face, out of focus face, distorted face, deformed eyes, low quality, pixelated, smudged features.`;
         const seed = Math.floor(Math.random() * 1_000_000);
         const polUrl =
           `https://image.pollinations.ai/prompt/${encodeURIComponent(polPrompt)}` +
-          `?width=1024&height=1024&nologo=true&enhance=true&seed=${seed}`;
+          `?width=1024&height=1024&nologo=true&enhance=true&model=flux&seed=${seed}`;
         const polResp = await fetch(polUrl);
         if (polResp.ok) {
           const blob = await polResp.blob();
