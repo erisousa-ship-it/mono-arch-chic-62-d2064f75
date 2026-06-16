@@ -59,50 +59,28 @@ Deno.serve(async (req) => {
 
     const errors: string[] = [];
 
-    // 1) PRIMÁRIO GRATUITO: Pollinations.ai (sem API key, sem crédito)
-    // Mantido antes dos provedores pagos para nunca quebrar com 402 de créditos.
-    try {
-      const seed = Math.floor(Math.random() * 1_000_000);
-      const polUrl =
-        `https://image.pollinations.ai/prompt/${encodeURIComponent(userText)}` +
-        `?width=1024&height=1024&nologo=true&seed=${seed}`;
-      const polResp = await fetch(polUrl);
-      if (polResp.ok) {
-        const buf = new Uint8Array(await polResp.arrayBuffer());
-        let bin = "";
-        for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
-        const b64 = btoa(bin);
-        const dataUrl = `data:image/png;base64,${b64}`;
-        return new Response(
-          JSON.stringify({ image_data_url: dataUrl, b64_json: b64, provider: "pollinations", model: "default" }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      }
-      errors.push(`pollinations_${polResp.status}`);
-    } catch (e) {
-      errors.push(`pollinations: ${String(e)}`);
-    }
+    // Prompt com diretrizes fortes de fidelidade facial — evita rostos disformes.
+    const faceSafePrompt =
+      `${userText}\n\n` +
+      `REQUISITOS OBRIGATÓRIOS DE QUALIDADE: rostos humanos perfeitamente formados, ` +
+      `anatomia facial correta (dois olhos simétricos, nariz e boca bem definidos), ` +
+      `traços faciais nítidos e em foco, expressão natural, pele realista com textura, ` +
+      `mãos com cinco dedos corretos, fotorrealismo profissional, alta resolução. ` +
+      `EVITAR: rostos disformes, olhos tortos, faces borradas, traços derretidos, anatomia distorcida, mãos deformadas, aparência de IA.`;
 
-    const localImage = makeLocalCreativeImage(prompt);
-    return new Response(
-      JSON.stringify({ image_data_url: localImage.dataUrl, b64_json: localImage.b64, provider: "local-svg", model: "no-credit-fallback" }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-
-    // 2) FALLBACK: Lovable AI Gateway (Nano Banana / gpt-image-2)
+    // 1) PRIMÁRIO: Lovable AI Gateway (gpt-image-2) — melhor qualidade facial.
     const lovableKey = Deno.env.get("LOVABLE_API_KEY");
     if (lovableKey) {
       try {
         const resp = await fetch("https://ai.gateway.lovable.dev/v1/images/generations", {
           method: "POST",
-          headers: { "Lovable-API-Key": lovableKey, "Content-Type": "application/json" },
+          headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
           body: JSON.stringify({
             model: "openai/gpt-image-2",
-            prompt: userText,
-            quality: "low",
+            prompt: faceSafePrompt,
+            quality: "medium",
             size: "1024x1024",
             n: 1,
-            stream: false,
           }),
         });
         const raw = await resp.text();
@@ -117,58 +95,21 @@ Deno.serve(async (req) => {
           }
           errors.push("lovable: empty response");
         } else {
-          errors.push(`lovable_${resp.status}: ${raw.slice(0, 300)}`);
+          errors.push(`lovable_${resp.status}: ${raw.slice(0, 200)}`);
         }
       } catch (e) {
         errors.push(`lovable: ${String(e)}`);
       }
-    } else {
-      errors.push("Missing LOVABLE_API_KEY");
     }
 
-    // 3) FALLBACK: Emergent
-    const emergentKey = Deno.env.get("EMERGENT_API_KEY");
-    const emergentUrl = (Deno.env.get("EMERGENT_BASE_URL") || "https://api.emergent.sh/v1").replace(/\/+$/, "");
-    if (emergentKey) {
-      try {
-        const emergentResp = await fetch(`${emergentUrl}/images/generations`, {
-          method: "POST",
-          headers: { Authorization: `Bearer ${emergentKey}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ model: "gpt-image-1", prompt: userText, size: "1024x1024", n: 1 }),
-        });
-        const raw = await emergentResp.text();
-        if (emergentResp.ok) {
-          const data = JSON.parse(raw || "{}");
-          const dataUrl = parseImageResponse(data);
-          if (dataUrl) {
-            const b64Only = dataUrl.startsWith("data:") ? dataUrl.split(",")[1] : dataUrl;
-            return new Response(JSON.stringify({ image_data_url: dataUrl, b64_json: b64Only, provider: "emergent" }), {
-              headers: { ...corsHeaders, "Content-Type": "application/json" },
-            });
-          }
-          errors.push("emergent: empty response");
-        } else {
-          errors.push(`emergent_${emergentResp.status}: ${raw.slice(0, 300)}`);
-        }
-      } catch (e) {
-        errors.push(`emergent: ${String(e)}`);
-      }
-    }
-
-    // 4) FALLBACK: Google Gemini (Nano Banana) direct API
+    // 2) FALLBACK: Gemini direto (rostos também bons).
     const geminiKey = Deno.env.get("GEMINI_API_KEY");
     if (geminiKey) {
       try {
         const model = "gemini-2.5-flash-image";
-        const parts: any[] = [{ text: userText }];
-        if (refUrl) {
-          const b64 = refUrl.split(",")[1];
-          parts.push({ inline_data: { mime_type: "image/png", data: b64 } });
-        }
-        if (logoUrl) {
-          const b64 = logoUrl.split(",")[1];
-          parts.push({ inline_data: { mime_type: "image/png", data: b64 } });
-        }
+        const parts: any[] = [{ text: faceSafePrompt }];
+        if (refUrl) parts.push({ inline_data: { mime_type: "image/png", data: refUrl.split(",")[1] } });
+        if (logoUrl) parts.push({ inline_data: { mime_type: "image/png", data: logoUrl.split(",")[1] } });
         const gResp = await fetch(
           `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${geminiKey}`,
           {
@@ -195,17 +136,42 @@ Deno.serve(async (req) => {
           }
           errors.push("gemini: empty response");
         } else {
-          errors.push(`gemini_${gResp.status}: ${raw.slice(0, 300)}`);
+          errors.push(`gemini_${gResp.status}: ${raw.slice(0, 200)}`);
         }
       } catch (e) {
         errors.push(`gemini: ${String(e)}`);
       }
     }
 
-    return new Response(JSON.stringify({ error: errors.join(" | ") || "Sem provedor de imagem disponível" }), {
-      status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    // 3) FALLBACK GRATUITO: Pollinations (flux) com prompt face-safe.
+    try {
+      const seed = Math.floor(Math.random() * 1_000_000);
+      const polUrl =
+        `https://image.pollinations.ai/prompt/${encodeURIComponent(faceSafePrompt)}` +
+        `?width=1024&height=1024&nologo=true&enhance=true&model=flux&seed=${seed}`;
+      const polResp = await fetch(polUrl);
+      if (polResp.ok) {
+        const buf = new Uint8Array(await polResp.arrayBuffer());
+        let bin = "";
+        for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+        const b64 = btoa(bin);
+        const dataUrl = `data:image/png;base64,${b64}`;
+        return new Response(
+          JSON.stringify({ image_data_url: dataUrl, b64_json: b64, provider: "pollinations", model: "flux" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      errors.push(`pollinations_${polResp.status}`);
+    } catch (e) {
+      errors.push(`pollinations: ${String(e)}`);
+    }
+
+    // 4) ÚLTIMO RECURSO: SVG local.
+    const localImage = makeLocalCreativeImage(prompt);
+    return new Response(
+      JSON.stringify({ image_data_url: localImage.dataUrl, b64_json: localImage.b64, provider: "local-svg", errors }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
   } catch (err) {
     return new Response(JSON.stringify({ error: String(err), marker: "v2-gemini" }), {
       status: 500,

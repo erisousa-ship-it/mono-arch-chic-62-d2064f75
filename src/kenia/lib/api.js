@@ -1404,7 +1404,34 @@ const staticPost = (url, body = {}) => {
       const styleHint = `${body.network || "instagram"} ${body.format || "post"}${body.case_type ? ` — área ${body.case_type}` : ""}${body.tone ? `, tom ${body.tone}` : ""}`;
       let b64 = "";
       let genError = null;
-      // 1) Fallback gratuito: Pollinations.ai direto do navegador (sem API key, sem crédito).
+      // 1) PRIMÁRIO: Lovable AI Gateway (gpt-image-2) via edge function — qualidade facial superior.
+      try {
+        const { data, error } = await supabase.functions.invoke("generate-cover-image", {
+          body: {
+            prompt: topic,
+            style: styleHint,
+            reference_image_base64: body.reference_image_base64 || null,
+            logo_base64: body.logo_base64 || null,
+          },
+        });
+        if (error) {
+          let detail = error?.message || String(error);
+          try {
+            const ctxJson = await error?.context?.json?.();
+            if (ctxJson?.error) detail = typeof ctxJson.error === "string" ? ctxJson.error : JSON.stringify(ctxJson.error);
+          } catch { /* ignore */ }
+          genError = genError || detail;
+        } else {
+          let img = data?.image_data_url || data?.b64_json || "";
+          if (img && !img.startsWith("data:")) img = `data:image/png;base64,${img}`;
+          // Ignora SVG local de fallback — preferimos cair em Pollinations no cliente.
+          if (img && data?.provider !== "local-svg") b64 = img;
+        }
+      } catch (e) {
+        genError = genError || e?.message || String(e);
+      }
+      // 2) Fallback gratuito: Pollinations.ai (flux) direto do navegador.
+      if (!b64) {
       try {
         // Coloca a CENA pedida pelo usuário em primeiro plano para a IA obedecer literalmente
         // (ex.: "trabalhador sendo demitido" => mostra trabalhador sendo demitido).
@@ -1436,7 +1463,8 @@ const staticPost = (url, body = {}) => {
       } catch (e) {
         genError = genError || e?.message || String(e);
       }
-      // 2) Backend Render (caso Pollinations falhe).
+      }
+      // 3) Backend Render (último recurso antes do SVG).
       if (!b64) {
         try {
           const res = await liveRequest("post", "/generate-image", {
@@ -1454,36 +1482,6 @@ const staticPost = (url, body = {}) => {
           }
         } catch (e) {
           genError = genError || e?.response?.data?.error || e?.message || String(e);
-        }
-      }
-      // 3) Lovable AI via Supabase edge function só como último recurso pago.
-      if (!b64) {
-        try {
-          const { data, error } = await supabase.functions.invoke("generate-cover-image", {
-            body: {
-              prompt: topic,
-              style: styleHint,
-              reference_image_base64: body.reference_image_base64 || null,
-              logo_base64: body.logo_base64 || null,
-            },
-          });
-          if (error) {
-            let detail = error?.message || String(error);
-            try {
-              const ctxJson = await error?.context?.json?.();
-              if (ctxJson?.error) detail = typeof ctxJson.error === "string" ? ctxJson.error : JSON.stringify(ctxJson.error);
-              if (ctxJson?.upstream_status === 402 || /not enough credits|payment_required/i.test(detail)) {
-                detail = "Créditos da Lovable AI esgotados.";
-              }
-            } catch { /* ignore */ }
-            genError = genError || detail;
-          } else {
-            b64 = data?.image_data_url || data?.b64_json || "";
-            if (b64 && !b64.startsWith("data:")) b64 = `data:image/png;base64,${b64}`;
-            if (!b64 && data?.error) genError = genError || data.error;
-          }
-        } catch (e) {
-          genError = genError || e?.message || String(e);
         }
       }
       if (!b64) {
