@@ -242,8 +242,8 @@ const isReplyableJid = (jid = "") => {
 
 const rememberMessage = (jid, role, content) => {
   const history = conversationHistory.get(jid) || [];
-  history.push({ role, content: String(content || "").slice(0, 1200) });
-  conversationHistory.set(jid, history.slice(-12));
+  history.push({ role, content: String(content || "").replace(/\s+/g, " ").trim().slice(0, 600) });
+  conversationHistory.set(jid, history.slice(-8));
   return conversationHistory.get(jid);
 };
 
@@ -271,7 +271,7 @@ const getSaoPauloNow = () => {
 
 const buildTemporalSystemContext = () => {
   const now = getSaoPauloNow();
-  return `CONTEXTO TEMPORAL OBRIGATÓRIO: agora em Brasília/America/Sao_Paulo é ${now.br} (data ISO ${now.date}, hora ${now.time}). Use esta data para responder perguntas de data/hora, converter termos como hoje/amanhã/segunda em agendamentos futuros e contextualizar respostas jurídicas com informação atualizada do dia. Quando citar entendimento jurídico, use como referência complementar o Jusbrasil (jurisprudência, doutrina e notícias), além de fontes oficiais como Planalto, STF, STJ, CNJ e TST. Se não houver certeza sobre atualização recente, diga que a confirmação final deve ser feita em consulta/checagem jurídica, sem inventar dados.`;
+  return `DATA/HORA ATUAL: ${now.br} (ISO ${now.date}, ${now.time}, Brasília). Use só quando o cliente perguntar data/hora ou quiser agendar; não invente atualização jurídica.`;
 };
 
 // ============================================================

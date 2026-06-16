@@ -1221,7 +1221,7 @@ const staticPost = (url, body = {}) => {
       const fallbackReply =
         "Tive uma instabilidade momentânea. Estou aqui para te ajudar; pode me contar o que aconteceu em uma frase curta?";
       try {
-        const history = (body.history || [])
+        const history = (body.history || []).slice(-8)
           .map((m) => `${m.role === "user" ? "Cliente" : "Assistente"}: ${m.content}`)
           .join("\n");
         const system = DEFAULT_PROMPT;
@@ -1305,16 +1305,16 @@ const staticPost = (url, body = {}) => {
             server_time: new Date().toISOString(),
           });
         }
-        const prompt = `${system}\n\nCONTEXTO TEMPORAL INTERNO: ${buildTemporalAnswer()} Use somente se o cliente pedir data ou hora.\n\n${history}\nCliente: ${userText}\nAssistente:`;
+        const prompt = `CONTEXTO TEMPORAL: ${buildTemporalAnswer()} Use só se o cliente pedir data/hora.\n\n${history}\nCliente: ${userText}\nAssistente:`;
 
         const tryModel = async (modelName) => {
           const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 45000);
+          const timeout = setTimeout(() => controller.abort(), 25000);
           const res = await fetch(DIRECT_OLLAMA_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
             signal: controller.signal,
-            body: JSON.stringify({ model: modelName, system: OLLAMA_SYSTEM_PROMPT, prompt: buildOllamaPrompt(prompt), stream: false, think: false, keep_alive: "10m", options: { num_ctx: 4096, num_predict: 200, temperature: 0.1 } }),
+            body: JSON.stringify({ model: modelName, system: OLLAMA_SYSTEM_PROMPT, prompt: buildOllamaPrompt(prompt), stream: false, think: false, keep_alive: "10m", options: { num_ctx: 2048, num_predict: 140, temperature: 0.1 } }),
           }).finally(() => clearTimeout(timeout));
           if (!res.ok) throw new Error(`Ollama HTTP ${res.status}`);
           const raw = await res.text();
