@@ -88,8 +88,14 @@ export default function ImageFusion() {
         { image1_base64: img1, image2_base64: img2, prompt: finalPrompt },
         { timeout: 180000 }
       );
-      if (data.ok && data.image) {
-        setResult(data.image);
+      const generatedImage = data?.image || data?.image_data_url || data?.image_b64 || data?.b64_json || null;
+      const normalizedImage = generatedImage && String(generatedImage).startsWith("data:")
+        ? generatedImage
+        : generatedImage
+          ? `data:image/png;base64,${generatedImage}`
+          : null;
+      if (data?.ok !== false && normalizedImage) {
+        setResult(normalizedImage);
         toast.success("Imagem gerada com sucesso!");
       } else {
         toast.error(data.error || "Não foi possível gerar a imagem");

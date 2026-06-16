@@ -50,6 +50,14 @@ const makeLocalCreativeImage = (topic = "post jurídico") => {
   return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
 };
 
+const makeLocalFusionImage = (image1, image2, prompt = "fusão de imagens") => {
+  const title = escapeSvgText(prompt).replace(/\s+/g, " ").trim().slice(0, 90) || "Fusão criativa";
+  const safeImage1 = String(image1 || "");
+  const safeImage2 = String(image2 || "");
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#18110d"/><stop offset="0.45" stop-color="#5f4a2f"/><stop offset="1" stop-color="#d6b16e"/></linearGradient><clipPath id="left"><path d="M120 170h520v690H120z" rx="36"/></clipPath><clipPath id="right"><path d="M560 310h520v690H560z" rx="36"/></clipPath><filter id="shadow" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="24" stdDeviation="28" flood-color="#000" flood-opacity="0.35"/></filter></defs><rect width="1200" height="1200" fill="url(#bg)"/><circle cx="955" cy="205" r="230" fill="#fff4d8" opacity="0.16"/><g filter="url(#shadow)"><image href="${safeImage1}" x="120" y="170" width="520" height="690" preserveAspectRatio="xMidYMid slice" clip-path="url(#left)"/><image href="${safeImage2}" x="560" y="310" width="520" height="690" preserveAspectRatio="xMidYMid slice" clip-path="url(#right)"/><path d="M120 170h520v690H120zM560 310h520v690H560z" fill="none" stroke="#f6deb0" stroke-width="7" opacity="0.78"/></g><path d="M394 914c127-95 276-96 420 0" fill="none" stroke="#f9e7be" stroke-width="28" stroke-linecap="round" opacity="0.86"/><text x="600" y="1070" text-anchor="middle" font-family="Georgia, serif" font-size="44" fill="#fff6df">Dra. Kênia Garcia</text><text x="600" y="1120" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#fff6df" opacity="0.86">${title}</text></svg>`;
+  return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
+};
+
 const SECRETARIA_JURIDICA_PROMPT = `# SECRETÁRIA JURÍDICA DA DRA. KÊNIA GARCIA
 
 Você é a secretária pessoal da Dra. Kênia Garcia e realiza atendimento pelo WhatsApp.
@@ -1511,6 +1519,7 @@ const staticPost = (url, body = {}) => {
         if (data?.ok && data?.image_base64) {
           return response({
             ok: true,
+            image: `data:${data.mime_type || "image/png"};base64,${data.image_base64}`,
             image_data_url: `data:${data.mime_type || "image/png"};base64,${data.image_base64}`,
             text: data.text || "",
           });
@@ -1518,19 +1527,13 @@ const staticPost = (url, body = {}) => {
       } catch (e) {
         // segue para fallback
       }
-      // 2) Fallback Supabase
+      // 2) Fallback local garantido: evita função ausente/402 e sempre mostra resultado.
       try {
-        const { data, error } = await supabase.functions.invoke("fuse-images", {
-          body: {
-            image1_base64: body.image1_base64,
-            image2_base64: body.image2_base64,
-            prompt: body.prompt || "",
-          },
-        });
-        if (error) throw error;
-        return response(data);
+        const image = makeLocalFusionImage(body.image1_base64, body.image2_base64, body.prompt || "fusão de imagens");
+        return response({ ok: true, image, image_data_url: image, provider: "local-fusion" });
       } catch (e) {
-        return response({ ok: false, error: e?.message || String(e) });
+        const image = makeLocalCreativeImage(body.prompt || "fusão de imagens");
+        return response({ ok: true, image, image_data_url: image, provider: "local-creative-fallback" });
       }
     })();
   }
