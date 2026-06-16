@@ -45,12 +45,9 @@ Deno.serve(async (req) => {
     }
 
     const userText =
-      `Crie uma IMAGEM FOTOGRÁFICA REALISTA que represente literalmente este pedido do usuário: "${prompt}". ` +
-      `O assunto principal deve aparecer de forma óbvia no centro da imagem; não gere imagem abstrata, genérica, simbólica ou apenas decorativa. ` +
-      `Se o pedido citar uma ação, mostre a ação acontecendo; se citar uma pessoa, situação ou objeto, mostre essa pessoa, situação ou objeto de modo reconhecível. ` +
-      `Exemplo de obediência: se o pedido for "trabalhador demitido", mostrar um trabalhador em ambiente profissional recebendo uma demissão de forma clara e humana. ` +
-      `Contexto visual secundário: advocacia brasileira, post profissional para Dra. Kênia Garcia, estética editorial elegante, iluminação profissional, paleta nude/dourada apenas como acabamento discreto. ` +
-      `Não incluir texto, letras, frases, placas legíveis, marcas, logotipos, balões de fala, molduras ou elementos que desviem do pedido principal. ` +
+      `Banner/post profissional para advocacia (Dra. Kênia Garcia). ` +
+      `Estilo cinematográfico, paleta nude/dourada, sem texto e sem letras. ` +
+      `Tema: ${prompt}.` +
       (logo_base64 ? " Considere o logotipo enviado." : "") +
       (reference_image_base64 ? " Use a imagem de referência como inspiração visual." : "");
 
@@ -68,7 +65,7 @@ Deno.serve(async (req) => {
       const seed = Math.floor(Math.random() * 1_000_000);
       const polUrl =
         `https://image.pollinations.ai/prompt/${encodeURIComponent(userText)}` +
-        `?width=1024&height=1024&nologo=true&enhance=true&seed=${seed}`;
+        `?width=1024&height=1024&nologo=true&seed=${seed}`;
       const polResp = await fetch(polUrl);
       if (polResp.ok) {
         const buf = new Uint8Array(await polResp.arrayBuffer());
