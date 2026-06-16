@@ -262,6 +262,15 @@ const isReplyableJid = (jid = "") => {
   return jid.endsWith("@s.whatsapp.net") || jid.endsWith("@lid") || jid.endsWith("@g.us");
 };
 
+const normalizeWhatsAppJid = (phone = "") => {
+  const raw = String(phone || "").trim();
+  if (raw.endsWith("@s.whatsapp.net") || raw.endsWith("@g.us") || raw.endsWith("@lid")) return raw;
+  let digits = raw.replace(/\D/g, "");
+  if (!digits) return "";
+  if ((digits.length === 10 || digits.length === 11) && !digits.startsWith("55")) digits = `55${digits}`;
+  return `${digits}@s.whatsapp.net`;
+};
+
 const rememberMessage = (jid, role, content) => {
   const history = conversationHistory.get(jid) || [];
   history.push({ role, content: String(content || "").slice(0, 1200) });
@@ -791,6 +800,43 @@ app.get("/api/whatsapp/diagnostics", auth, (_req, res) => {
 
 app.post("/api/whatsapp/test-connection", auth, (_req, res) => {
   res.json({ connected: state.connected, provider: "baileys", state: connectionState(), error: state.lastError });
+});
+
+app.post("/api/whatsapp/send-direct", auth, async (req, res) => {
+  try {
+    const jid = normalizeWhatsAppJid(req.body?.phone || req.body?.jid || req.body?.to);
+    const text = String(req.body?.text || req.body?.message || "").trim();
+    if (!jid || !text) return res.status(400).json({ delivered: false, error: "Informe telefone e mensagem." });
+    if (!state.connected || !state.sock) return res.status(503).json({ delivered: false, error: "WhatsApp não conectado. Escaneie o QR Code primeiro." });
+    const providerResult = await state.sock.sendMessage(jid, { text });
+    res.json({ ok: true, delivered: true, provider: "baileys", jid, provider_result: providerResult });
+  } catch (e) {
+    res.status(500).json({ delivered: false, error: e.message });
+  }
+});
+
+app.post("/api/whatsapp/test-ollama-reply", auth, async (req, res) => {
+  try {
+    const prompt = String(req.body?.text || req.body?.prompt || "Olá, preciso de atendimento jurídico.").trim();
+    const messages = [
+      { role: "system", content: `${state.config.bot_prompt || DEFAULT_BOT_PROMPT}\n\n${buildTemporalSystemContext()}` },
+      { role: "user", content: prompt },
+    ];
+    const reply = sanitizeOutbound(await generateDirectOllamaReply(messages));
+    let delivery = null;
+    const jid = normalizeWhatsAppJid(req.body?.phone || req.body?.jid || req.body?.to);
+    if (jid) {
+      if (!state.connected || !state.sock) return res.status(503).json({ ok: false, provider: "ollama", reply, delivered: false, error: "Ollama respondeu, mas o WhatsApp não está conectado." });
+      delivery = await state.sock.sendMessage(jid, { text: reply });
+      state.lastAutoReplyAt = Date.now();
+      state.autoReplyCount += 1;
+    }
+    state.lastAiError = null;
+    res.json({ ok: true, provider: "ollama", model: OLLAMA_MODEL, reply, delivered: !!jid, jid: jid || null, provider_result: delivery });
+  } catch (e) {
+    state.lastAiError = `ollama_test: ${e.message}`;
+    res.status(500).json({ ok: false, provider: "ollama", model: OLLAMA_MODEL, error: e.message });
+  }
 });
 
 app.get("/api/whatsapp/baileys/status", auth, (_req, res) => {

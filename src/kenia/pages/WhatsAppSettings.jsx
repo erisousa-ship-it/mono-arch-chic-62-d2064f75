@@ -26,6 +26,8 @@ export default function WhatsAppSettings() {
   const [loadingQr, setLoadingQr] = useState(false);
   const [sendTest, setSendTest] = useState({ phone: "", text: "Olá! Mensagem de teste LegalFlow." });
   const [sendingTest, setSendingTest] = useState(false);
+  const [testingOllamaReply, setTestingOllamaReply] = useState(false);
+  const [ollamaReplyTest, setOllamaReplyTest] = useState(null);
   const [settingWebhook, setSettingWebhook] = useState(false);
   const [webhookResult, setWebhookResult] = useState(null);
   const [diag, setDiag] = useState(null);
@@ -355,6 +357,24 @@ export default function WhatsAppSettings() {
       toast.error(e?.response?.data?.error || "Erro ao enviar teste");
     } finally {
       setSendingTest(false);
+    }
+  };
+
+  const doOllamaReplyTest = async () => {
+    setTestingOllamaReply(true);
+    setOllamaReplyTest(null);
+    try {
+      const payload = { text: sendTest.text, ...(sendTest.phone ? { phone: sendTest.phone } : {}) };
+      const { data } = await api.post("/whatsapp/test-ollama-reply", payload);
+      setOllamaReplyTest(data);
+      if (data.delivered) toast.success("Ollama respondeu e enviou no WhatsApp!");
+      else toast.success("Ollama respondeu corretamente.");
+    } catch (e) {
+      const data = e?.response?.data || { ok: false, error: e?.message || "Erro ao testar Ollama" };
+      setOllamaReplyTest(data);
+      toast.error(data.error || "Erro ao testar Ollama");
+    } finally {
+      setTestingOllamaReply(false);
     }
   };
 
@@ -1294,7 +1314,7 @@ export default function WhatsAppSettings() {
             <Send className="w-4 h-4 text-gold-600" /> Envio de teste
           </h3>
           <p className="text-sm text-nude-500 mb-4">
-            Use para validar o provedor selecionado.
+            Use para validar envio manual e a resposta real do Ollama antes de testar com clientes.
           </p>
           <div className="grid md:grid-cols-3 gap-3">
             <div className="md:col-span-1">
@@ -1306,11 +1326,21 @@ export default function WhatsAppSettings() {
               <Input value={sendTest.text} onChange={(e) => setSendTest({ ...sendTest, text: e.target.value })} data-testid="test-text" />
             </div>
           </div>
-          <div className="mt-3 flex justify-end">
+          <div className="mt-3 flex flex-wrap justify-end gap-2">
+            <Button onClick={doOllamaReplyTest} disabled={testingOllamaReply || sendingTest} variant="outline" data-testid="test-ollama-reply">
+              {testingOllamaReply ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Testando Ollama...</> : <><Bot className="w-4 h-4 mr-2" />Testar resposta Ollama</>}
+            </Button>
             <Button onClick={doSendTest} disabled={sendingTest} className="bg-gold-600 hover:bg-gold-700" data-testid="test-send">
               {sendingTest ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Enviando...</> : <><Send className="w-4 h-4 mr-2" />Enviar teste</>}
             </Button>
           </div>
+          {ollamaReplyTest && (
+            <div className={`mt-3 rounded-md border p-3 text-xs ${ollamaReplyTest.ok ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-rose-200 bg-rose-50 text-rose-900"}`} data-testid="ollama-reply-result">
+              <div className="font-semibold mb-1">{ollamaReplyTest.ok ? "Ollama OK" : "Falha no Ollama"}</div>
+              <div className="whitespace-pre-wrap break-words">{ollamaReplyTest.reply || ollamaReplyTest.error || "Sem resposta."}</div>
+              {ollamaReplyTest.ok && <div className="mt-1 opacity-80">{ollamaReplyTest.delivered ? "Resposta enviada no WhatsApp." : "Resposta gerada; informe um telefone para enviar também."}</div>}
+            </div>
+          )}
         </Card>
 
         {!isBaileys && (
