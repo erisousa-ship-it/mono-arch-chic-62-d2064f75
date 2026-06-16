@@ -51,7 +51,7 @@ Deno.serve(async (req) => {
       const seed = Math.floor(Math.random() * 1_000_000);
       const polUrl =
         `https://image.pollinations.ai/prompt/${encodeURIComponent(userText)}` +
-        `?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
+        `?width=1024&height=1024&nologo=true&seed=${seed}`;
       const polResp = await fetch(polUrl);
       if (polResp.ok) {
         const buf = new Uint8Array(await polResp.arrayBuffer());
@@ -60,7 +60,7 @@ Deno.serve(async (req) => {
         const b64 = btoa(bin);
         const dataUrl = `data:image/png;base64,${b64}`;
         return new Response(
-          JSON.stringify({ image_data_url: dataUrl, b64_json: b64, provider: "pollinations", model: "flux" }),
+          JSON.stringify({ image_data_url: dataUrl, b64_json: b64, provider: "pollinations", model: "default" }),
           { headers: { ...corsHeaders, "Content-Type": "application/json" } },
         );
       }

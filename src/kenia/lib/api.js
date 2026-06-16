@@ -1397,7 +1397,7 @@ const staticPost = (url, body = {}) => {
         const seed = Math.floor(Math.random() * 1_000_000);
         const polUrl =
           `https://image.pollinations.ai/prompt/${encodeURIComponent(polPrompt)}` +
-          `?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
+          `?width=1024&height=1024&nologo=true&seed=${seed}`;
         const polResp = await fetch(polUrl);
         if (polResp.ok) {
           const blob = await polResp.blob();
