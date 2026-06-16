@@ -1224,7 +1224,6 @@ const staticPost = (url, body = {}) => {
         const history = (body.history || []).slice(-8)
           .map((m) => `${m.role === "user" ? "Cliente" : "Assistente"}: ${m.content}`)
           .join("\n");
-        const system = DEFAULT_PROMPT;
         const userText = body.message || body.text || "";
         if (userAskedTemporalInfo(userText)) {
           return response({
@@ -1336,14 +1335,14 @@ const staticPost = (url, body = {}) => {
         let finalText = text;
         if (isHistoryDumpReply(finalText) || isNearDuplicateReply(finalText, body.history || [])) {
           try {
-            const retryPrompt = `${system}\n\nCONTEXTO TEMPORAL INTERNO: ${buildTemporalAnswer()} Use somente se o cliente pedir data ou hora.\n\nCORREÇÃO OBRIGATÓRIA: a última resposta candidata repetiu uma mensagem anterior. Gere uma resposta NOVA, curta, útil, sem saudação inicial e sem repetir nenhuma frase, pergunta ou tópico já enviado no histórico. Avance a conversa com uma informação ou pergunta diferente.\n\n${history}\nCliente: ${userText}\nAssistente:`;
+            const retryPrompt = `CORREÇÃO: gere uma resposta nova, curta, útil, sem saudação inicial e sem repetir frases do histórico. Avance com uma informação ou pergunta diferente.\n\n${history}\nCliente: ${userText}\nAssistente:`;
             const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 45000);
+            const timeout = setTimeout(() => controller.abort(), 25000);
             const res = await fetch(DIRECT_OLLAMA_URL, {
               method: "POST",
               headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
               signal: controller.signal,
-              body: JSON.stringify({ model: DIRECT_OLLAMA_MODEL, system: OLLAMA_SYSTEM_PROMPT, prompt: buildOllamaPrompt(retryPrompt), stream: false, think: false, keep_alive: "10m", options: { num_ctx: 4096, num_predict: 200, temperature: 0.9 } }),
+              body: JSON.stringify({ model: DIRECT_OLLAMA_MODEL, system: OLLAMA_SYSTEM_PROMPT, prompt: buildOllamaPrompt(retryPrompt), stream: false, think: false, keep_alive: "10m", options: { num_ctx: 2048, num_predict: 140, temperature: 0.6 } }),
             }).finally(() => clearTimeout(timeout));
             if (res.ok) {
               const raw = await res.text();

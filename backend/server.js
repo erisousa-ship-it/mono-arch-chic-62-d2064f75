@@ -338,14 +338,10 @@ const buildSchedulingContext = async () => {
   const lines = available
     .map((d) => `- ${d.weekday} ${d.human} (${d.date}): ${d.slots.join(", ")}`)
     .join("\n");
-  return `AGENDA REAL DA DRA. KÊNIA (consulte antes de oferecer horários — NÃO invente dias/horas):
+  return `AGENDA REAL (use só estes horários; não invente):
 ${lines}
 
-REGRAS DE AGENDAMENTO:
-1. Ofereça SEMPRE 2 a 3 opções concretas tiradas EXCLUSIVAMENTE da lista acima (ex.: "posso oferecer terça 17/06 às 10h ou quinta 19/06 às 15h").
-2. Não sugira fim de semana nem horários fora da lista.
-3. Se o cliente recusar todas, pergunte preferência de turno (manhã/tarde) e ofereça outras opções AINDA da lista.
-4. Confirme com o cliente antes de fechar e só então emita o bloco <AGENDAMENTO> com a data/hora escolhida exatamente como aparece acima.`;
+AGENDAMENTO: ofereça 2 ou 3 opções da lista, confirme com o cliente e só então emita <AGENDAMENTO> com data/hora escolhida.`;
 };
 
 const userAskedTemporalInfo = (text = "") =>
