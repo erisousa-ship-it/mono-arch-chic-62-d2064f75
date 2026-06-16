@@ -55,6 +55,8 @@ const state = {
   lastAiProvider: null,
   lastAiFailureChain: [],
   lastAutoReplyAt: null,
+  lastSentMessageId: null,
+  lastReplyTarget: null,
   autoReplyCount: 0,
   qrAttempts: 0,
   config: { provider: "baileys", bot_enabled: true, bot_prompt: DEFAULT_BOT_PROMPT },
@@ -887,6 +889,8 @@ app.get("/api/whatsapp/baileys/status", auth, (_req, res) => {
     last_ai_provider: state.lastAiProvider,
     last_ai_failure_chain: state.lastAiFailureChain,
     last_auto_reply_at: state.lastAutoReplyAt,
+    last_sent_message_id: state.lastSentMessageId,
+    last_reply_target: state.lastReplyTarget,
     auto_reply_count: state.autoReplyCount,
   });
 });
