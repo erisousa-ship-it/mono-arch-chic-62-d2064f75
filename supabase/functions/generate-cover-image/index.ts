@@ -36,14 +36,24 @@ Deno.serve(async (req) => {
     }
 
     const styleText = typeof style === "string" && style.trim() ? style.trim() : "post para redes sociais";
+    // Tenta extrair um TÍTULO explícito do prompt (após "Título:" ou primeira linha curta)
+    let extractedTitle = "";
+    const tMatch = prompt.match(/t[íi]tulo\s*[:\-]\s*([^\n]+)/i);
+    if (tMatch) extractedTitle = tMatch[1].trim().replace(/["']/g, "").slice(0, 90);
+
     const userText =
-      `CENA PRINCIPAL EXATA: ${prompt}. ` +
-      `Mostre literalmente o que foi pedido, sem transformar em conceito abstrato. ` +
-      `Fotografia editorial fotorrealista para ${styleText} da Dra. Kênia Garcia, com estética jurídica elegante. ` +
-      `Se houver pessoas, use no máximo 1 ou 2 personagens principais, em plano médio, com rostos naturais, proporcionais e nítidos. ` +
-      `Mãos devem aparecer pouco ou com anatomia correta. Paleta nude/dourada sutil. Sem texto, sem letras e sem logotipos gerados. ` +
-      (logo_base64 ? " Considere o logotipo enviado." : "") +
-      (reference_image_base64 ? " Use a imagem de referência como inspiração visual." : "");
+      `BRIEFING PARA IMAGEM EDITORIAL — PESQUISE REFERÊNCIAS VISUAIS REAIS antes de compor (campanhas oficiais, fotojornalismo, materiais institucionais brasileiros) e use-as APENAS como inspiração.\n\n` +
+      `TEMA / CENA EXATA: ${prompt}\n` +
+      `Represente LITERALMENTE o assunto pedido, sem transformar em conceito abstrato. ` +
+      `Se o tema for sensível (violência, demissão, acidente, dívida, divórcio, herança, INSS), trate de forma ética, humanizada e educativa, com personagens e ambientes brasileiros realistas.\n\n` +
+      `FORMATO: ${styleText} para a Dra. Kênia Garcia (advocacia).\n` +
+      `ESTILO: fotografia editorial fotorrealista, iluminação profissional, composição organizada, profundidade visual, texturas realistas, paleta nude/dourada sutil com estética jurídica elegante.\n` +
+      `PERSONAGENS: no máximo 1 ou 2, em plano médio, rostos naturais, proporcionais, simétricos e nítidos; expressões coerentes com o tema; mãos com anatomia correta (cinco dedos) ou fora do quadro.\n` +
+      (extractedTitle
+        ? `TÍTULO NA IMAGEM: inserir o texto "${extractedTitle}" com tipografia clara, legível, harmonizada à composição (sem erros de ortografia).\n`
+        : `SEM texto, letras ou logotipos gerados pela IA.\n`) +
+      (logo_base64 ? `Considere o logotipo enviado como referência de marca.\n` : "") +
+      (reference_image_base64 ? `Use a imagem de referência enviada como inspiração visual.\n` : "");
 
     const userContent: any[] = [{ type: "text", text: userText }];
     const refUrl = toDataUrl(reference_image_base64);
