@@ -92,7 +92,7 @@ Deno.serve(async (req) => {
     }
 
     // 2) OPCIONAL: Lovable AI Gateway. Só usa se for solicitado para não derrubar por falta de créditos.
-    const usePaidGateway = Boolean(Deno.env.get("ENABLE_PAID_IMAGE_GATEWAY"));
+    const usePaidGateway = Deno.env.get("ENABLE_PAID_IMAGE_GATEWAY") === "true";
     const lovableKey = usePaidGateway ? Deno.env.get("LOVABLE_API_KEY") : null;
     if (lovableKey) {
       try {
