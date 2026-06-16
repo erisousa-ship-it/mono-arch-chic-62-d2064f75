@@ -103,6 +103,23 @@ function stripPromptLeak(reply = "") {
   return text;
 }
 
+function extractAppointment(reply = ""): { appointment: any; cleaned: string } {
+  const text = String(reply || "");
+  const re = /<AGENDAMENTO>\s*([\s\S]*?)\s*<\/AGENDAMENTO>/i;
+  const m = text.match(re);
+  if (!m) return { appointment: null, cleaned: text };
+  let appointment: any = null;
+  try {
+    appointment = JSON.parse(m[1]);
+  } catch {
+    // tenta extrair o primeiro objeto JSON do bloco
+    const j = m[1].match(/\{[\s\S]*\}/);
+    if (j) { try { appointment = JSON.parse(j[0]); } catch { appointment = null; } }
+  }
+  const cleaned = text.replace(re, "").replace(/\n{3,}/g, "\n\n").trim();
+  return { appointment, cleaned };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -196,14 +213,16 @@ Deno.serve(async (req) => {
     let payload: any = null;
     try { payload = JSON.parse(call?.function?.arguments || "{}"); } catch { payload = {}; }
 
-    const reply = enforceSecondPerson(stripPromptLeak(payload?.response || data?.choices?.[0]?.message?.content || "Pode me contar um pouco mais sobre o que aconteceu?"));
+    const rawReply = payload?.response || data?.choices?.[0]?.message?.content || "Pode me contar um pouco mais sobre o que aconteceu?";
+    const { appointment, cleaned } = extractAppointment(rawReply);
+    const reply = enforceSecondPerson(stripPromptLeak(cleaned));
     const analysis = return_analysis ? (payload?.analysis || null) : null;
 
     return json({
       session_id: session_id || crypto.randomUUID(),
       response: reply,
       audio_base64: null,
-      appointment: null,
+      appointment,
       handoff: Boolean(payload?.handoff),
       speaker: payload?.handoff ? "Dra. Kênia Garcia" : null,
       analysis,
