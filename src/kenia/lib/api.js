@@ -1471,6 +1471,10 @@ const staticPost = (url, body = {}) => {
           genError = genError || e?.message || String(e);
         }
       }
+      if (!b64) {
+        b64 = makeLocalCreativeImage(topic);
+        genError = null;
+      }
       const item = {
         id: nextId("creative"),
         ...body,
