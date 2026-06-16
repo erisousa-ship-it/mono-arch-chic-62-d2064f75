@@ -158,6 +158,29 @@ Deno.serve(async (req) => {
       }
     }
 
+    // 4) FALLBACK GRATUITO: Pollinations.ai (sem API key, sem crédito)
+    try {
+      const seed = Math.floor(Math.random() * 1_000_000);
+      const polUrl =
+        `https://image.pollinations.ai/prompt/${encodeURIComponent(userText)}` +
+        `?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
+      const polResp = await fetch(polUrl);
+      if (polResp.ok) {
+        const buf = new Uint8Array(await polResp.arrayBuffer());
+        let bin = "";
+        for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+        const b64 = btoa(bin);
+        const dataUrl = `data:image/png;base64,${b64}`;
+        return new Response(
+          JSON.stringify({ image_data_url: dataUrl, b64_json: b64, provider: "pollinations", model: "flux" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      errors.push(`pollinations_${polResp.status}`);
+    } catch (e) {
+      errors.push(`pollinations: ${String(e)}`);
+    }
+
     return new Response(JSON.stringify({ error: errors.join(" | ") || "Sem provedor de imagem disponível" }), {
       status: 500,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
