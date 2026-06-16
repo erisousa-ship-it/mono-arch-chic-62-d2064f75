@@ -244,6 +244,30 @@ const isReplyableJid = (jid = "") => {
   return jid.endsWith("@s.whatsapp.net") || jid.endsWith("@lid") || jid.endsWith("@g.us");
 };
 
+const normalizePnJid = (jid = "") => {
+  const value = String(jid || "").trim();
+  if (!value) return "";
+  if (value.endsWith("@s.whatsapp.net")) return value;
+  const digits = value.replace(/@.+$/, "").replace(/\D/g, "");
+  return digits ? `${digits}@s.whatsapp.net` : "";
+};
+
+const getReplyTargetJid = (msg = {}) => {
+  const key = msg.key || {};
+  const remoteJid = key.remoteJid || "";
+  if (!remoteJid.endsWith("@lid")) return remoteJid;
+  return normalizePnJid(
+    key.remoteJidAlt ||
+    key.senderPn ||
+    key.participantAlt ||
+    key.participantPn ||
+    msg.participantAlt ||
+    msg.participantPn ||
+    msg.senderPn ||
+    "",
+  ) || remoteJid;
+};
+
 const rememberMessage = (jid, role, content) => {
   const history = conversationHistory.get(jid) || [];
   history.push({ role, content: String(content || "").replace(/\s+/g, " ").trim().slice(0, 600) });
@@ -578,8 +602,9 @@ async function generateAiReply(jid, text) {
 
 async function handleIncomingMessage(msg) {
   const jid = msg.key?.remoteJid;
+  const replyJid = getReplyTargetJid(msg);
   const id = msg.key?.id;
-  if (!state.config.bot_enabled || msg.key?.fromMe || !jid || !id || !msg.message || !isReplyableJid(jid)) return;
+  if (!state.config.bot_enabled || msg.key?.fromMe || !jid || !replyJid || !id || !msg.message || !isReplyableJid(replyJid)) return;
   if (processedMessages.has(id)) return;
   processedMessages.add(id);
   if (processedMessages.size > 500) processedMessages.clear();
@@ -588,12 +613,12 @@ async function handleIncomingMessage(msg) {
   if (!text) return;
 
   try {
-    await state.sock?.sendPresenceUpdate?.("composing", jid);
-    const rawReply = await withTimeout(generateAiReply(jid, text), AUTO_REPLY_TIMEOUT_MS, "auto_reply");
+    await state.sock?.sendPresenceUpdate?.("composing", replyJid);
+    const rawReply = await withTimeout(generateAiReply(replyJid, text), AUTO_REPLY_TIMEOUT_MS, "auto_reply");
     const agendamento = parseAgendamentoBlock(rawReply);
     let reply = stripAgendamentoBlock(rawReply);
     if (agendamento) {
-      const created = await createSupabaseAppointment(jid, agendamento);
+      const created = await createSupabaseAppointment(replyJid, agendamento);
       if (created) {
         const link = created.meeting_link;
         if (!/agendad|confirmad|marcad/i.test(reply)) {
@@ -607,17 +632,20 @@ async function handleIncomingMessage(msg) {
       }
     }
     if (!reply) reply = "Pode me confirmar essa informação, por favor?";
-    await withTimeout(state.sock?.sendMessage(jid, { text: reply }, { quoted: msg }), WHATSAPP_SEND_TIMEOUT_MS, "whatsapp_send");
+    const sendOptions = jid.endsWith("@lid") ? {} : { quoted: msg };
+    const sent = await withTimeout(state.sock?.sendMessage(replyJid, { text: reply }, sendOptions), WHATSAPP_SEND_TIMEOUT_MS, "whatsapp_send");
     state.lastAutoReplyAt = Date.now();
+    state.lastSentMessageId = sent?.key?.id || null;
+    state.lastReplyTarget = replyJid;
     state.autoReplyCount += 1;
   } catch (e) {
     state.lastAiError = e.message;
     console.error("auto reply failed", e);
     try {
-      await withTimeout(state.sock?.sendMessage(jid, { text: "Tive uma instabilidade momentânea no atendimento. Pode me enviar sua mensagem novamente, por favor?" }, { quoted: msg }), 10000, "whatsapp_send_fallback");
+      await withTimeout(state.sock?.sendMessage(replyJid, { text: "Tive uma instabilidade momentânea no atendimento. Pode me enviar sua mensagem novamente, por favor?" }), WHATSAPP_SEND_TIMEOUT_MS, "whatsapp_send_fallback");
     } catch {}
   } finally {
-    try { await state.sock?.sendPresenceUpdate?.("paused", jid); } catch {}
+    try { await state.sock?.sendPresenceUpdate?.("paused", replyJid); } catch {}
   }
 }
 
