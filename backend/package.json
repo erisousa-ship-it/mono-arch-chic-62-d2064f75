@@ -8,7 +8,7 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
-    "@whiskeysockets/baileys": "^6.7.9",
+    "@whiskeysockets/baileys": "^6.7.20",
     "cors": "^2.8.5",
     "express": "^4.19.2",
     "pino": "^9.4.0",
