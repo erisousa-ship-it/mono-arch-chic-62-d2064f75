@@ -97,7 +97,8 @@ export default function WhatsAppSettings() {
         }
         try {
           const { data: qr } = await api.get("/whatsapp/baileys/qr");
-          setBaileysQr(qr);
+          const qrImage = qr?.qr || await normalizeQrPayload(qr?.raw);
+          setBaileysQr(qrImage ? { ...qr, qr: qrImage } : qr);
         } catch { /* ignore qr fetch errors */ }
       } else {
         setBaileysQr(null);
@@ -167,7 +168,8 @@ export default function WhatsAppSettings() {
       const { data } = await api.post("/whatsapp/baileys/reset-session");
       toast.success("Sessão limpa — gerando QR novo...");
       setBaileysStatus(data);
-      setBaileysQr(data?.qr ? { qr: data.qr } : null);
+      const qrImage = data?.qr || await normalizeQrPayload(data?.raw);
+      setBaileysQr(qrImage ? { ...data, qr: qrImage } : null);
       setTimeout(pollBaileys, 2500);
     } catch (e) {
       toast.error("Erro ao criar nova sessão — verifique logs do backend");
@@ -270,7 +272,7 @@ export default function WhatsAppSettings() {
     const candidates = [
       data?.data?.value, data?.data?.qrcode, data?.data?.image, data?.data?.base64,
       data?.data?.qrCode, data?.data?.qr, data?.value, data?.qrcode, data?.image,
-      data?.base64, data?.qrCode, data?.qr, data?.png,
+      data?.base64, data?.qrCode, data?.qr, data?.raw, data?.png,
       typeof data === "string" ? data : null,
     ];
     for (const c of candidates) {
