@@ -475,13 +475,19 @@ const withTimeout = (promise, ms, label) => {
 async function generateDirectOllamaReply(messages) {
   if (!OLLAMA_BASE_URL) throw new Error("OLLAMA_BASE_URL não configurado no backend WhatsApp");
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25000);
+  const timeout = setTimeout(() => controller.abort(), OLLAMA_CHAT_TIMEOUT_MS);
   try {
     const r = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
       signal: controller.signal,
-      body: JSON.stringify({ model: OLLAMA_MODEL, messages, stream: false, options: { temperature: 0.2, num_predict: 220 } }),
+      body: JSON.stringify({
+        model: OLLAMA_MODEL,
+        messages,
+        stream: false,
+        keep_alive: "10m",
+        options: { temperature: 0.15, num_ctx: 2048, num_predict: 140 },
+      }),
     });
     const raw = await r.text();
     if (!r.ok) throw new Error(`ollama_${r.status}: ${raw.slice(0, 300)}`);
@@ -498,7 +504,7 @@ async function generateDirectOllamaReply(messages) {
 
 async function generateAiRouterReply(messages) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 25000);
+  const timeout = setTimeout(() => controller.abort(), AI_FALLBACK_TIMEOUT_MS);
   try {
     const r = await fetch(AI_ROUTER_URL, {
       method: "POST",
@@ -541,6 +547,7 @@ async function generateAiReply(jid, text) {
   const failures = [];
   const providers = [
     { name: "ollama_direct", run: () => generateDirectOllamaReply(messages) },
+    { name: "lovable", run: async () => callLovableChat({ messages }) },
     { name: "emergent", run: async () => callEmergentChat({ messages }) },
     { name: "ai-router", run: () => generateAiRouterReply(messages) },
   ];
@@ -582,7 +589,7 @@ async function handleIncomingMessage(msg) {
 
   try {
     await state.sock?.sendPresenceUpdate?.("composing", jid);
-    const rawReply = await withTimeout(generateAiReply(jid, text), 32000, "auto_reply");
+    const rawReply = await withTimeout(generateAiReply(jid, text), AUTO_REPLY_TIMEOUT_MS, "auto_reply");
     const agendamento = parseAgendamentoBlock(rawReply);
     let reply = stripAgendamentoBlock(rawReply);
     if (agendamento) {
@@ -600,7 +607,7 @@ async function handleIncomingMessage(msg) {
       }
     }
     if (!reply) reply = "Pode me confirmar essa informação, por favor?";
-    await withTimeout(state.sock?.sendMessage(jid, { text: reply }, { quoted: msg }), 10000, "whatsapp_send");
+    await withTimeout(state.sock?.sendMessage(jid, { text: reply }, { quoted: msg }), WHATSAPP_SEND_TIMEOUT_MS, "whatsapp_send");
     state.lastAutoReplyAt = Date.now();
     state.autoReplyCount += 1;
   } catch (e) {
