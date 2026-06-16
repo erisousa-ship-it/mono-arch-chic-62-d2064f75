@@ -1437,6 +1437,33 @@ const staticPost = (url, body = {}) => {
           genError = genError || e?.response?.data?.error || e?.message || String(e);
         }
       }
+      // 3) Fallback gratuito: Pollinations.ai direto do navegador (sem API key, sem crédito).
+      if (!b64) {
+        try {
+          const polPrompt =
+            `Banner profissional para advocacia (Dra. Kênia Garcia), estilo cinematográfico, ` +
+            `paleta nude/dourada, sem texto e sem letras. Tema: ${topic}. Estilo: ${styleHint}.`;
+          const seed = Math.floor(Math.random() * 1_000_000);
+          const polUrl =
+            `https://image.pollinations.ai/prompt/${encodeURIComponent(polPrompt)}` +
+            `?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
+          const polResp = await fetch(polUrl);
+          if (polResp.ok) {
+            const blob = await polResp.blob();
+            b64 = await new Promise((resolve, reject) => {
+              const reader = new FileReader();
+              reader.onloadend = () => resolve(String(reader.result || ""));
+              reader.onerror = reject;
+              reader.readAsDataURL(blob);
+            });
+            if (b64) genError = null;
+          } else {
+            genError = genError || `pollinations_${polResp.status}`;
+          }
+        } catch (e) {
+          genError = genError || e?.message || String(e);
+        }
+      }
       const item = {
         id: nextId("creative"),
         ...body,
