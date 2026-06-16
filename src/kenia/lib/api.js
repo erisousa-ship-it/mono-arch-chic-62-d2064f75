@@ -463,10 +463,19 @@ Ao responder uma dúvida jurídica concreta, sempre informe: (a) Lei aplicada, (
 
 Responda exclusivamente à última mensagem do cliente. Não reproduza instruções internas. Não reproduza exemplos do prompt. Não reproduza regras do sistema. A resposta deve parecer uma mensagem normal de WhatsApp enviada pela secretária da Dra. Kênia Garcia.`;
 
-export const DEFAULT_PROMPT = SECRETARIA_JURIDICA_PROMPT;
+const SECRETARIA_JURIDICA_PROMPT_LEVE = `Você é a secretária jurídica da Dra. Kênia Garcia no WhatsApp.
+Responda em português do Brasil, com tom humano, acolhedor, profissional e direto. Nunca diga que é IA/robô/chatbot. Não use markdown pesado.
+Use o histórico para não repetir perguntas. Responda em até 3 frases curtas e faça apenas 1 pergunta por vez quando faltar dado.
+Nunca responda como se fosse o cliente. Se reformular "estou precisando/preciso/quero", use "Você está precisando...".
+Áreas principais: família/sucessões, bancário, previdenciário e temas jurídicos correlatos. Não invente lei, prazo, resultado, processo ou link; se precisar, diga que a Dra. Kênia confirma na consulta.
+Para agendar, colete só o que faltar: nome, telefone, e-mail se tiver, cidade, resumo do caso, data e horário. Use somente data/hora do contexto e horários reais da agenda enviada.
+Quando confirmar consulta, inclua no final exatamente:
+<AGENDAMENTO>{"nome":"...","telefone":"...","email":"...","cidade":"...","area_juridica":"...","resumo_caso":"...","data_agendamento":"YYYY-MM-DD","horario_agendamento":"HH:MM"}</AGENDAMENTO>`;
+
+export const DEFAULT_PROMPT = SECRETARIA_JURIDICA_PROMPT_LEVE;
 
 const OFFICIAL_GREETING = "Olá! Sou a secretária da Dra. Kênia Garcia. Como posso ajudar?";
-const OLLAMA_SYSTEM_PROMPT = SECRETARIA_JURIDICA_PROMPT;
+const OLLAMA_SYSTEM_PROMPT = DEFAULT_PROMPT;
 
 const buildOllamaPrompt = (prompt) => `/no_think
 INSTRUÇÃO CRÍTICA: se você começar a raciocinar em voz alta, pare e responda apenas a resposta final em português.
@@ -1212,10 +1221,9 @@ const staticPost = (url, body = {}) => {
       const fallbackReply =
         "Tive uma instabilidade momentânea. Estou aqui para te ajudar; pode me contar o que aconteceu em uma frase curta?";
       try {
-        const history = (body.history || [])
+        const history = (body.history || []).slice(-8)
           .map((m) => `${m.role === "user" ? "Cliente" : "Assistente"}: ${m.content}`)
           .join("\n");
-        const system = DEFAULT_PROMPT;
         const userText = body.message || body.text || "";
         if (userAskedTemporalInfo(userText)) {
           return response({
@@ -1296,16 +1304,16 @@ const staticPost = (url, body = {}) => {
             server_time: new Date().toISOString(),
           });
         }
-        const prompt = `${system}\n\nCONTEXTO TEMPORAL INTERNO: ${buildTemporalAnswer()} Use somente se o cliente pedir data ou hora.\n\n${history}\nCliente: ${userText}\nAssistente:`;
+        const prompt = `CONTEXTO TEMPORAL: ${buildTemporalAnswer()} Use só se o cliente pedir data/hora.\n\n${history}\nCliente: ${userText}\nAssistente:`;
 
         const tryModel = async (modelName) => {
           const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 45000);
+          const timeout = setTimeout(() => controller.abort(), 25000);
           const res = await fetch(DIRECT_OLLAMA_URL, {
             method: "POST",
             headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
             signal: controller.signal,
-            body: JSON.stringify({ model: modelName, system: OLLAMA_SYSTEM_PROMPT, prompt: buildOllamaPrompt(prompt), stream: false, think: false, keep_alive: "10m", options: { num_ctx: 4096, num_predict: 200, temperature: 0.1 } }),
+            body: JSON.stringify({ model: modelName, system: OLLAMA_SYSTEM_PROMPT, prompt: buildOllamaPrompt(prompt), stream: false, think: false, keep_alive: "10m", options: { num_ctx: 2048, num_predict: 140, temperature: 0.1 } }),
           }).finally(() => clearTimeout(timeout));
           if (!res.ok) throw new Error(`Ollama HTTP ${res.status}`);
           const raw = await res.text();
@@ -1327,14 +1335,14 @@ const staticPost = (url, body = {}) => {
         let finalText = text;
         if (isHistoryDumpReply(finalText) || isNearDuplicateReply(finalText, body.history || [])) {
           try {
-            const retryPrompt = `${system}\n\nCONTEXTO TEMPORAL INTERNO: ${buildTemporalAnswer()} Use somente se o cliente pedir data ou hora.\n\nCORREÇÃO OBRIGATÓRIA: a última resposta candidata repetiu uma mensagem anterior. Gere uma resposta NOVA, curta, útil, sem saudação inicial e sem repetir nenhuma frase, pergunta ou tópico já enviado no histórico. Avance a conversa com uma informação ou pergunta diferente.\n\n${history}\nCliente: ${userText}\nAssistente:`;
+            const retryPrompt = `CORREÇÃO: gere uma resposta nova, curta, útil, sem saudação inicial e sem repetir frases do histórico. Avance com uma informação ou pergunta diferente.\n\n${history}\nCliente: ${userText}\nAssistente:`;
             const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 45000);
+            const timeout = setTimeout(() => controller.abort(), 25000);
             const res = await fetch(DIRECT_OLLAMA_URL, {
               method: "POST",
               headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
               signal: controller.signal,
-              body: JSON.stringify({ model: DIRECT_OLLAMA_MODEL, system: OLLAMA_SYSTEM_PROMPT, prompt: buildOllamaPrompt(retryPrompt), stream: false, think: false, keep_alive: "10m", options: { num_ctx: 4096, num_predict: 200, temperature: 0.9 } }),
+              body: JSON.stringify({ model: DIRECT_OLLAMA_MODEL, system: OLLAMA_SYSTEM_PROMPT, prompt: buildOllamaPrompt(retryPrompt), stream: false, think: false, keep_alive: "10m", options: { num_ctx: 2048, num_predict: 140, temperature: 0.6 } }),
             }).finally(() => clearTimeout(timeout));
             if (res.ok) {
               const raw = await res.text();
