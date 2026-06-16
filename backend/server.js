@@ -440,17 +440,36 @@ const callLovableImage = async ({ prompt, style = "" }) => {
 const callEmergentChat = async ({ messages, key = "" }) => {
   const apiKey = key || state.settings.llm_text_key || EMERGENT_API_KEY;
   if (!apiKey) throw new Error("EMERGENT_API_KEY não configurada");
-  const r = await fetch(`${EMERGENT_BASE_URL}/chat/completions`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-    body: JSON.stringify({ model: EMERGENT_TEXT_MODEL, messages }),
-  });
-  const raw = await r.text();
-  if (!r.ok) throw new Error(`emergent_chat_${r.status}: ${raw.slice(0, 500)}`);
-  const data = JSON.parse(raw || "{}");
-  const text = String(data?.choices?.[0]?.message?.content || "").trim();
-  if (!text) throw new Error("emergent_chat_empty_response");
-  return text;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 18000);
+  try {
+    const r = await fetch(`${EMERGENT_BASE_URL}/chat/completions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      signal: controller.signal,
+      body: JSON.stringify({ model: EMERGENT_TEXT_MODEL, messages }),
+    });
+    const raw = await r.text();
+    if (!r.ok) throw new Error(`emergent_chat_${r.status}: ${raw.slice(0, 500)}`);
+    const data = JSON.parse(raw || "{}");
+    const text = String(data?.choices?.[0]?.message?.content || "").trim();
+    if (!text) throw new Error("emergent_chat_empty_response");
+    return text;
+  } catch (e) {
+    throw new Error(e?.name === "AbortError" ? "emergent_timeout" : e.message);
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+const withTimeout = (promise, ms, label) => {
+  let timer;
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => {
+      timer = setTimeout(() => reject(new Error(`${label}_timeout`)), ms);
+    }),
+  ]).finally(() => clearTimeout(timer));
 };
 
 async function generateDirectOllamaReply(messages) {
@@ -563,7 +582,7 @@ async function handleIncomingMessage(msg) {
 
   try {
     await state.sock?.sendPresenceUpdate?.("composing", jid);
-    const rawReply = await generateAiReply(jid, text);
+    const rawReply = await withTimeout(generateAiReply(jid, text), 32000, "auto_reply");
     const agendamento = parseAgendamentoBlock(rawReply);
     let reply = stripAgendamentoBlock(rawReply);
     if (agendamento) {
@@ -581,14 +600,14 @@ async function handleIncomingMessage(msg) {
       }
     }
     if (!reply) reply = "Pode me confirmar essa informação, por favor?";
-    await state.sock?.sendMessage(jid, { text: reply }, { quoted: msg });
+    await withTimeout(state.sock?.sendMessage(jid, { text: reply }, { quoted: msg }), 10000, "whatsapp_send");
     state.lastAutoReplyAt = Date.now();
     state.autoReplyCount += 1;
   } catch (e) {
     state.lastAiError = e.message;
     console.error("auto reply failed", e);
     try {
-      await state.sock?.sendMessage(jid, { text: "Tive uma instabilidade momentânea no atendimento. Pode me enviar sua mensagem novamente, por favor?" }, { quoted: msg });
+      await withTimeout(state.sock?.sendMessage(jid, { text: "Tive uma instabilidade momentânea no atendimento. Pode me enviar sua mensagem novamente, por favor?" }, { quoted: msg }), 10000, "whatsapp_send_fallback");
     } catch {}
   } finally {
     try { await state.sock?.sendPresenceUpdate?.("paused", jid); } catch {}
