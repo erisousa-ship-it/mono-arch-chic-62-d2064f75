@@ -24,6 +24,10 @@ const EMERGENT_API_KEY = process.env.EMERGENT_API_KEY || "";
 const EMERGENT_TEXT_MODEL = process.env.EMERGENT_TEXT_MODEL || "gpt-4o-mini";
 const EMERGENT_IMAGE_MODEL = process.env.EMERGENT_IMAGE_MODEL || "gpt-image-1";
 const LOVABLE_API_KEY = process.env.LOVABLE_API_KEY || "";
+const OLLAMA_CHAT_TIMEOUT_MS = 14000;
+const AI_FALLBACK_TIMEOUT_MS = 6000;
+const AUTO_REPLY_TIMEOUT_MS = 22000;
+const WHATSAPP_SEND_TIMEOUT_MS = 10000;
 
 const DEFAULT_BOT_PROMPT = `Você é a secretária jurídica da Dra. Kênia Garcia no WhatsApp.
 Responda em português do Brasil, com tom humano, acolhedor, profissional e direto. Nunca diga que é IA/robô/chatbot. Não use markdown pesado.
@@ -413,7 +417,7 @@ const callEmergentChat = async ({ messages, key = "" }) => {
   const apiKey = key || state.settings.llm_text_key || EMERGENT_API_KEY;
   if (!apiKey) throw new Error("EMERGENT_API_KEY não configurada");
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 18000);
+  const timeout = setTimeout(() => controller.abort(), AI_FALLBACK_TIMEOUT_MS);
   try {
     const r = await fetch(`${EMERGENT_BASE_URL}/chat/completions`, {
       method: "POST",
@@ -429,6 +433,30 @@ const callEmergentChat = async ({ messages, key = "" }) => {
     return text;
   } catch (e) {
     throw new Error(e?.name === "AbortError" ? "emergent_timeout" : e.message);
+  } finally {
+    clearTimeout(timeout);
+  }
+};
+
+const callLovableChat = async ({ messages }) => {
+  if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY não configurada");
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), AI_FALLBACK_TIMEOUT_MS);
+  try {
+    const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${LOVABLE_API_KEY}` },
+      signal: controller.signal,
+      body: JSON.stringify({ model: "google/gemini-3-flash-preview", messages, temperature: 0.2, max_tokens: 140 }),
+    });
+    const raw = await r.text();
+    if (!r.ok) throw new Error(`lovable_chat_${r.status}: ${raw.slice(0, 300)}`);
+    const data = JSON.parse(raw || "{}");
+    const text = String(data?.choices?.[0]?.message?.content || "").trim();
+    if (!text) throw new Error("lovable_chat_empty_response");
+    return text;
+  } catch (e) {
+    throw new Error(e?.name === "AbortError" ? "lovable_timeout" : e.message);
   } finally {
     clearTimeout(timeout);
   }
