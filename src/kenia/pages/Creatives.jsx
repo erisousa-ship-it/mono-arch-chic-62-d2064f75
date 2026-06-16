@@ -11,7 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, Dialog
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/kenia/components/ui/select";
 import { Sparkles, Instagram, Facebook, Linkedin, Trash2, Download, Copy, Wand2, Upload, X as XIcon, CalendarClock } from "lucide-react";
 import { toast } from "sonner";
-// SocialConnections removidas da área de criativos
+import SocialConnections from "@/kenia/components/SocialConnections";
 
 const PLATFORMS = [
   { id: "instagram", label: "Instagram" },
@@ -357,6 +357,7 @@ export default function Creatives() {
       </div>
 
       <div className="flex-1 overflow-auto p-6 space-y-4">
+        <SocialConnections />
         {items.length === 0 ? (
           <Card className="p-12 border-dashed border-nude-300 text-center">
             <div className="w-12 h-12 rounded-md bg-gold-100 grid place-items-center mx-auto mb-4">

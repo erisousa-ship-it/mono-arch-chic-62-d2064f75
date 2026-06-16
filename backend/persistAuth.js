@@ -6,17 +6,7 @@ const URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
 const TABLE = "whatsapp_auth";
 
-let client = null;
-try {
-  if (URL && KEY && /^https?:\/\//i.test(URL)) {
-    client = createClient(URL, KEY, { auth: { persistSession: false } });
-  } else {
-    console.warn("[persistAuth] disabled: missing or invalid SUPABASE_URL / KEY");
-  }
-} catch (e) {
-  console.warn("[persistAuth] init failed, disabling persistence:", e?.message || e);
-  client = null;
-}
+const client = (URL && KEY) ? createClient(URL, KEY, { auth: { persistSession: false } }) : null;
 
 export const persistEnabled = !!client;
 

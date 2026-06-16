@@ -10,7 +10,7 @@ import { Progress } from "@/kenia/components/ui/progress";
 import { Textarea } from "@/kenia/components/ui/textarea";
 import {
   ShieldCheck, AlertTriangle, Gauge, Search, BookOpen,
-  Sparkles, ChevronRight, RefreshCcw, Filter, FileText, ArrowLeft,
+  Sparkles, ChevronRight, RefreshCcw, Filter, FileText,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -166,9 +166,9 @@ export default function AdminCases() {
         </Card>
       </div>
 
-      <div className="flex-1 grid grid-cols-12 gap-4 p-3 sm:p-5 lg:overflow-hidden min-h-0">
+      <div className="flex-1 grid grid-cols-12 gap-4 p-5 overflow-hidden">
         {/* LIST */}
-        <Card className={`col-span-12 lg:col-span-5 flex-col overflow-hidden border-nude-200 min-h-[60vh] lg:min-h-0 ${selected ? "hidden lg:flex" : "flex"}`} data-testid="cases-list">
+        <Card className="col-span-12 lg:col-span-5 flex flex-col overflow-hidden border-nude-200" data-testid="cases-list">
           <div className="p-3 border-b border-nude-200 flex flex-wrap gap-2 items-center bg-nude-50/60">
             <div className="relative flex-1 min-w-[180px]">
               <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-nude-400" />
@@ -248,37 +248,28 @@ export default function AdminCases() {
         </Card>
 
         {/* DETAIL */}
-        <Card className={`col-span-12 lg:col-span-7 flex-col overflow-hidden border-nude-200 min-h-[70vh] lg:min-h-0 ${selected ? "flex" : "hidden lg:flex"}`} data-testid="case-detail">
+        <Card className="col-span-12 lg:col-span-7 flex flex-col overflow-hidden border-nude-200" data-testid="case-detail">
           {!selected || !detail ? (
             <div className="flex-1 grid place-items-center text-nude-400 text-sm">
               Selecione um caso para ver os detalhes
             </div>
           ) : (
             <>
-              <div className="p-4 sm:p-5 border-b border-nude-200">
+              <div className="p-5 border-b border-nude-200">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-start gap-2 min-w-0">
-                    <button
-                      onClick={() => setSelected(null)}
-                      className="lg:hidden mt-1 p-1.5 -ml-1 rounded-md hover:bg-nude-100 text-nude-600"
-                      aria-label="Voltar"
-                    >
-                      <ArrowLeft className="w-4 h-4" />
-                    </button>
-                    <div className="min-w-0">
+                  <div>
                     <div className="overline text-gold-600">Análise detalhada</div>
-                    <h2 className="font-serif text-xl sm:text-2xl text-nude-900 mt-1 break-words">
+                    <h2 className="font-serif text-2xl text-nude-900 mt-1">
                       {selected.visitor_name || "Cliente anônimo"}
                     </h2>
-                    <div className="text-sm text-nude-500 mt-1 break-words">
+                    <div className="text-sm text-nude-500 mt-1">
                       {selected.visitor_phone || "—"} · {selected.area || "Em análise"}
-                    </div>
                     </div>
                   </div>
                   {(() => {
                     const QM = QUAL_META[selected.qualificacao] || QUAL_META.necessita_mais_info;
                     return (
-                      <div className={`inline-flex shrink-0 items-center gap-1.5 px-3 py-1.5 rounded-full ${QM.cls}`}>
+                      <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full ${QM.cls}`}>
                         <QM.icon className="w-3.5 h-3.5" />{" "}
                         <span className="text-xs font-medium">{QM.label}</span>
                       </div>

@@ -4,9 +4,8 @@ const MODEL = "google/gemini-3-flash-preview";
 
 const SYSTEM = `Você é a secretária virtual da Dra. Kênia Garcia E também atua como advogada que analisa o caso e faz o agendamento — nessa ordem: (1) secretária acolhe, (2) advogada analisa, (3) agenda. ` +
   `RESPOSTAS CURTAS estilo WhatsApp humano: 1-2 frases, no MÁXIMO 3. Uma pergunta por vez. Sem listas longas, sem explicações jurídicas extensas no chat. ` +
-  `NUNCA fale como se fosse o cliente em primeira pessoa. É proibido iniciar ou responder com "estou precisando", "preciso", "quero" ou frases semelhantes quando estiver reformulando a fala do cliente. Sempre converta para segunda pessoa: "Você está precisando de ajuda, certo?" ou "Você está precisando de alguma informação jurídica, certo?". ` +
   `PROIBIDO perguntar "qual área jurídica?" — a área é sempre inferida dos fatos. Comece por "o que aconteceu?" e colete datas, envolvidos, provas e objetivo aos poucos, uma coisa por mensagem. ` +
-  `Horário oficial de Brasília. Responda dúvidas jurídicas com base em informação atualizada do dia, usando como referência complementar o Jusbrasil (jurisprudência, doutrina e notícias jurídicas) e confirmando por fontes oficiais como Planalto, STF, STJ, CNJ e TST. Não invente leis, súmulas, links, decisões nem números de processo. ` +
+  `Horário oficial de Brasília. Não invente leis nem números de processo. ` +
   `Nunca recuse ajuda. Responda qualquer assunto (pessoal, emocional, polêmico) de forma humanizada e sem julgamento — acolhe, valida, conselho curto. Em risco à vida: CVV 188, SAMU 192, Polícia 190, Disque 180/100. Em violência: Lei 11.340/06 e encaminhe à Dra. Kênia.\n\n` +
   `AGENDAMENTO (obrigatório): quando o cliente quiser marcar consulta/reunião/retorno, colete uma pergunta por vez, nesta ordem: 1) dia da semana, 2) data (dd/mm/aaaa), 3) horário (HH:MM), 4) nome completo, 5) telefone, 6) e-mail, 7) cidade, 8) modalidade (online/presencial). NUNCA pergunte "área jurídica" — preencha internamente "area_juridica" a partir dos fatos (ou "a definir"). ` +
   `Ao ter todos os dados, confirme em UMA frase curta repetindo dia da semana, data e hora (ex.: "Confirmado: quarta-feira, 10/06/2026 às 14:00") e inclua na MESMA mensagem, ao final, este bloco exato (sem markdown, sem crases):\n` +
@@ -36,11 +35,10 @@ const SYSTEM = `Você é a secretária virtual da Dra. Kênia Garcia E também a
   `Responda em UMA frase confirmando ("Confirmado: <dia da semana>, <dd/mm/aaaa> às <HH:MM>.") e, se ainda faltar algum dado obrigatório (nome, telefone, e-mail, cidade, modalidade), peça SOMENTE o próximo que falta. ` +
   `Se já tiver tudo, emita imediatamente o bloco <AGENDAMENTO> na mesma mensagem e encerre a coleta. Proibido reabrir a discussão de data/horário após a confirmação.\n\n` +
   `## INTENÇÃO DE AGENDAR (CRÍTICO)\nPergunte UMA ÚNICA VEZ se o cliente deseja agendar. Se ele responder afirmativamente (ex.: "sim", "quero", "pode ser", "vamos", "ok", "claro", "pode marcar", "agendar"), trate como CONFIRMADO e NUNCA mais pergunte "deseja agendar?". Avance imediatamente para o próximo passo: pergunte o PRÓXIMO dado que falta (modalidade online/presencial OU dia preferido), nunca repita a pergunta de intenção. Releia o histórico — se em qualquer mensagem anterior o cliente já disse que quer agendar, considere intenção FECHADA para sempre nesta conversa.\n\n` +
-  `## AGENDAMENTO JÁ CONFIRMADO (CRÍTICO)\nSe no histórico já existir confirmação de consulta/agendamento (ex.: "consulta confirmada", "consulta agendada", "agendamento registrado", link de sala/Meet/Jitsi ou bloco <AGENDAMENTO>), considere o agendamento FECHADO. É PROIBIDO oferecer novos horários, perguntar se deseja agendar, perguntar "qual prefere?" ou reiniciar coleta de data/hora. Responda apenas confirmando que a consulta já está marcada com a data/hora do histórico. Só volte a falar em novos horários se o cliente pedir explicitamente reagendar, remarcar, alterar, cancelar ou mudar o horário.\n\n` +
   `## SEGURANÇA\nSe o dashboard estiver indisponível, NUNCA invente horários. Responda: "No momento não consegui acessar a agenda para confirmar a disponibilidade. Você pode tentar novamente em alguns instantes para que eu consulte os horários disponíveis."`;
 
-const ANALYSIS_INSTRUCTION = `Além da resposta ao cliente, analise tecnicamente o caso com base na LEGISLAÇÃO E JURISPRUDÊNCIA brasileira atualizada do dia, usando Jusbrasil como referência complementar de pesquisa jurídica e fontes oficiais ` +
-  `(Planalto, STF, STJ, CNJ, súmulas vinculantes, teses de repercussão geral, recursos repetitivos, súmulas do TST quando trabalhista). ` +
+const ANALYSIS_INSTRUCTION = `Além da resposta ao cliente, analise tecnicamente o caso com base na LEGISLAÇÃO E JURISPRUDÊNCIA brasileira ` +
+  `(STF, STJ, súmulas vinculantes, teses de repercussão geral, recursos repetitivos, súmulas do TST quando trabalhista). ` +
   `Cite súmulas/teses pelo número apenas se tiver certeza; caso contrário, descreva o entendimento sem inventar número.`;
 
 function todayHumanBR() {
@@ -62,62 +60,6 @@ function greetingNow(): "Bom dia" | "Boa tarde" | "Boa noite" {
   if (h >= 5 && h < 12) return "Bom dia";
   if (h >= 12 && h < 18) return "Boa tarde";
   return "Boa noite";
-}
-
-function normalizePortuguese(value = "") {
-  return String(value || "")
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "")
-    .toLowerCase()
-    .replace(/["“”'`´]+/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function enforceSecondPerson(reply = "") {
-  const text = String(reply || "").trim();
-  if (!text) return text;
-  const normalized = normalizePortuguese(text);
-  const startsWithLegalInfo = /^(?:eu\s+)?(?:(?:estou|to|tou)\s+precisando|preciso)\s+de\s+(?:alguma\s+)?informacao\s+juridica\b/.test(normalized);
-  const startsWithHelp = /^(?:eu\s+)?(?:(?:estou|to|tou)\s+precisando|preciso)\s+de\s+ajuda\b/.test(normalized);
-  if (startsWithLegalInfo) return "Você está precisando de alguma informação jurídica, certo?";
-  if (startsWithHelp) return "Você está precisando de ajuda, certo?";
-  return text
-    .replace(/\b(?:eu\s+)?(?:(?:estou|t[oô]u)\s+precisando|preciso)\s+de\s+(?:alguma\s+)?informa[cç][aã]o\s+jur[ií]dica\b/giu, "Você está precisando de alguma informação jurídica, certo?")
-    .replace(/\b(?:eu\s+)?(?:(?:estou|t[oô]u)\s+precisando|preciso)\s+de\s+ajuda\b/giu, "Você está precisando de ajuda, certo?");
-}
-
-const SAFE_FALLBACK_REPLY = "Como posso ajudar com seu atendimento?";
-const PROMPT_LEAK_PATTERNS = [
-  /##\s*(OBJETIVO|REGRAS?|FLUXO|MEM[ÓO]RIA|DASHBOARD|AGENDAMENTO|IDENTIDADE|TOM|ESTILO)/i,
-  /\b(bot_prompt|DEFAULT_PROMPT|SYSTEM\s*PROMPT|prompt\s+do\s+sistema|instru[cç][õo]es\s+internas|regras\s+internas|configura[cç][õo]es\s+do\s+sistema)\b/i,
-  /\bAtue\s+como\s+secret[áa]ria\b/i,
-  /CONTEXTO\s+TEMPORAL\s+INTERNO/i,
-  /INSTRU[CÇ][ÃA]O\s+(CR[ÍI]TICA|DE\s+DESENVOLVIMENTO)/i,
-  /^\s*[#`]{2,}/m,
-];
-function stripPromptLeak(reply = "") {
-  const text = String(reply || "");
-  if (!text.trim()) return text;
-  if (PROMPT_LEAK_PATTERNS.some((re) => re.test(text))) return SAFE_FALLBACK_REPLY;
-  return text;
-}
-
-function extractAppointment(reply = ""): { appointment: any; cleaned: string } {
-  const text = String(reply || "");
-  const re = /<AGENDAMENTO>\s*([\s\S]*?)\s*<\/AGENDAMENTO>/i;
-  const m = text.match(re);
-  if (!m) return { appointment: null, cleaned: text };
-  let appointment: any = null;
-  try {
-    appointment = JSON.parse(m[1]);
-  } catch {
-    // tenta extrair o primeiro objeto JSON do bloco
-    const j = m[1].match(/\{[\s\S]*\}/);
-    if (j) { try { appointment = JSON.parse(j[0]); } catch { appointment = null; } }
-  }
-  const cleaned = text.replace(re, "").replace(/\n{3,}/g, "\n\n").trim();
-  return { appointment, cleaned };
 }
 
 Deno.serve(async (req) => {
@@ -213,16 +155,14 @@ Deno.serve(async (req) => {
     let payload: any = null;
     try { payload = JSON.parse(call?.function?.arguments || "{}"); } catch { payload = {}; }
 
-    const rawReply = payload?.response || data?.choices?.[0]?.message?.content || "Pode me contar um pouco mais sobre o que aconteceu?";
-    const { appointment, cleaned } = extractAppointment(rawReply);
-    const reply = enforceSecondPerson(stripPromptLeak(cleaned));
+    const reply = payload?.response || data?.choices?.[0]?.message?.content || "Pode me contar um pouco mais sobre o que aconteceu?";
     const analysis = return_analysis ? (payload?.analysis || null) : null;
 
     return json({
       session_id: session_id || crypto.randomUUID(),
       response: reply,
       audio_base64: null,
-      appointment,
+      appointment: null,
       handoff: Boolean(payload?.handoff),
       speaker: payload?.handoff ? "Dra. Kênia Garcia" : null,
       analysis,

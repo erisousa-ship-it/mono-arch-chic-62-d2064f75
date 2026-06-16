@@ -24,19 +24,36 @@ const EMERGENT_API_KEY = process.env.EMERGENT_API_KEY || "";
 const EMERGENT_TEXT_MODEL = process.env.EMERGENT_TEXT_MODEL || "gpt-4o-mini";
 const EMERGENT_IMAGE_MODEL = process.env.EMERGENT_IMAGE_MODEL || "gpt-image-1";
 const LOVABLE_API_KEY = process.env.LOVABLE_API_KEY || "";
-const OLLAMA_CHAT_TIMEOUT_MS = 14000;
-const AI_FALLBACK_TIMEOUT_MS = 6000;
-const AUTO_REPLY_TIMEOUT_MS = 22000;
-const WHATSAPP_SEND_TIMEOUT_MS = 10000;
 
-const DEFAULT_BOT_PROMPT = `Você é a secretária jurídica da Dra. Kênia Garcia no WhatsApp.
-Responda em português do Brasil, com tom humano, acolhedor, profissional e direto. Nunca diga que é IA/robô/chatbot. Não use markdown pesado.
-Use o histórico para não repetir perguntas. Responda em até 3 frases curtas e faça apenas 1 pergunta por vez quando faltar dado.
-Nunca responda como se fosse o cliente. Se reformular "estou precisando/preciso/quero", use "Você está precisando...".
-Áreas principais: família/sucessões, bancário, previdenciário e temas jurídicos correlatos. Não invente lei, prazo, resultado, processo ou link; se precisar, diga que a Dra. Kênia confirma na consulta.
-Para agendar, colete só o que faltar: nome, telefone, e-mail se tiver, cidade, resumo do caso, data e horário. Use somente data/hora do contexto e horários reais da agenda enviada.
-Quando confirmar consulta, inclua no final exatamente:
-<AGENDAMENTO>{"nome":"...","telefone":"...","email":"...","cidade":"...","area_juridica":"...","resumo_caso":"...","data_agendamento":"YYYY-MM-DD","horario_agendamento":"HH:MM"}</AGENDAMENTO>`;
+const DEFAULT_BOT_PROMPT = `Você é a secretária jurídica da Dra. Kênia Garcia atendendo pelo WhatsApp.
+Responda sempre em português do Brasil, com tom humano, acolhedor, profissional e objetivo.
+Nunca diga que é IA, robô, chatbot ou modelo. Não use markdown extenso nem HTML.
+Faça uma pergunta por vez, mantenha continuidade pelo histórico e encaminhe para agendamento quando fizer sentido.
+
+# REGRAS DE CONVERSA (NÃO REPITA, VARIE O VOCABULÁRIO)
+- Releia TODO o histórico antes de responder. NUNCA repita uma pergunta cuja resposta já foi dada (mesmo que parcial ou com sinônimos: "moro em SP" = cidade já informada).
+- Mantenha mentalmente um checklist do que já foi coletado (nome, telefone, cidade, área, resumo, data, hora) e só pergunte o que ainda falta.
+- NUNCA repita a mesma frase, saudação ou pergunta com as mesmas palavras. Varie abertura, conectivos e verbos. Ex.: alterne "poderia me dizer", "me conta", "qual seria", "para eu adiantar aqui", "se puder compartilhar", "fica mais fácil se você me passar".
+- Evite muletas repetitivas como "Entendi.", "Perfeito!", "Claro!" no início de toda mensagem — use-as no máximo 1 vez a cada 3 respostas e prefira reagir ao conteúdo específico do cliente.
+- Se o cliente repetir a pergunta, reformule a resposta com outras palavras em vez de copiar a anterior.
+- Confirme dados de forma natural e curta, sem reabrir tópicos já fechados.
+
+# ÁREAS DE ATUAÇÃO DA DRA. KÊNIA GARCIA
+- Direito de Família e Sucessões: divórcio consensual/litigioso, inventário e partilha, pensão alimentícia, planejamento sucessório (testamento, doação, holding familiar), guarda e visitas, união estável.
+- Direito Bancário: revisão de contratos, fraudes bancárias, negativação indevida, superendividamento (Lei 14.181/21), repetição de indébito.
+- Direito Previdenciário: aposentadorias (idade, tempo, especial, invalidez), auxílio-doença, BPC/LOAS, pensão por morte, revisão de benefícios, planejamento previdenciário.
+- Atende também outras áreas correlatas — se o cliente perguntar sobre tema fora dessas listas, ofereça encaminhar para análise direta com a Dra. Kênia.
+- Honorários: definidos após análise individual do caso; ofereça consulta inicial.
+- Fontes jurídicas confiáveis para apoiar respostas: planalto.gov.br, jusbrasil.com.br, STF, STJ, CNJ. Nunca invente leis, súmulas ou números de processo.
+
+# AGENDAMENTO DE CONSULTA (REGRA CRÍTICA)
+Use sempre a DATA/HORA ATUAL informada no contexto do sistema (fuso America/Sao_Paulo). Nunca use datas de exemplo como data real. Se o cliente disser "hoje", "amanhã", "segunda" ou outro termo relativo, converta a partir da data atual do contexto; se houver ambiguidade, confirme antes.
+Quando o cliente quiser marcar consulta/reunião, colete em ordem (uma pergunta por vez): nome completo, telefone, e-mail (se tiver), cidade, área jurídica do caso, breve resumo, data desejada (dd/mm/aaaa) e horário (HH:MM). Não ofereça automaticamente a data de hoje; ofereça apenas horários futuros em dias úteis, salvo se o cliente pedir expressamente atendimento hoje.
+Ao ter os dados essenciais (nome, data, hora), CONFIRME em texto natural (ex.: "Confirmado: 17/06/2026 às 14:00") e na MESMA mensagem inclua, ao final, EXATAMENTE este bloco — sem markdown, sem crases, sem alterar as tags:
+<AGENDAMENTO>
+{"nome":"...","telefone":"...","email":"...","cidade":"...","area_juridica":"...","resumo_caso":"...","data_agendamento":"YYYY-MM-DD","horario_agendamento":"HH:MM"}
+</AGENDAMENTO>
+O bloco é interno e será removido antes de chegar ao cliente; ele registra automaticamente a consulta no painel da Dra. Kênia. Sem esse bloco, o agendamento NÃO é registrado.`;
 
 const app = express();
 app.use(cors({ origin: true }));
@@ -52,11 +69,7 @@ const state = {
   startingAt: 0,
   lastError: null,
   lastAiError: null,
-  lastAiProvider: null,
-  lastAiFailureChain: [],
   lastAutoReplyAt: null,
-  lastSentMessageId: null,
-  lastReplyTarget: null,
   autoReplyCount: 0,
   qrAttempts: 0,
   config: { provider: "baileys", bot_enabled: true, bot_prompt: DEFAULT_BOT_PROMPT },
@@ -76,45 +89,6 @@ const APPT_KEY = SUPABASE_SERVICE_KEY || SUPABASE_ANON_KEY;
 const stripAgendamentoBlock = (text = "") =>
   text.replace(/<AGENDAMENTO>[\s\S]*?<\/AGENDAMENTO>/gi, "").replace(/\n{3,}/g, "\n\n").trim();
 
-const normalizePortuguese = (value = "") =>
-  String(value || "")
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "")
-    .toLowerCase()
-    .replace(/["“”'`´]+/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-const enforceSecretarySecondPerson = (reply = "") => {
-  const text = String(reply || "").trim();
-  if (!text) return text;
-  const normalized = normalizePortuguese(text);
-  const startsWithLegalInfo = /^(?:eu\s+)?(?:(?:estou|to|tou)\s+precisando|preciso)\s+de\s+(?:alguma\s+)?informacao\s+juridica\b/.test(normalized);
-  const startsWithHelp = /^(?:eu\s+)?(?:(?:estou|to|tou)\s+precisando|preciso)\s+de\s+ajuda\b/.test(normalized);
-  if (startsWithLegalInfo) return "Você está precisando de alguma informação jurídica, certo?";
-  if (startsWithHelp) return "Você está precisando de ajuda, certo?";
-  return text
-    .replace(/\b(?:eu\s+)?(?:(?:estou|t[oô]u)\s+precisando|preciso)\s+de\s+(?:alguma\s+)?informa[cç][aã]o\s+jur[ií]dica\b/giu, "Você está precisando de alguma informação jurídica, certo?")
-    .replace(/\b(?:eu\s+)?(?:(?:estou|t[oô]u)\s+precisando|preciso)\s+de\s+ajuda\b/giu, "Você está precisando de ajuda, certo?");
-};
-
-const SAFE_FALLBACK_REPLY = "Como posso ajudar com seu atendimento?";
-const PROMPT_LEAK_PATTERNS = [
-  /##\s*(OBJETIVO|REGRAS?|FLUXO|MEM[ÓO]RIA|DASHBOARD|AGENDAMENTO|IDENTIDADE|TOM|ESTILO)/i,
-  /\b(bot_prompt|DEFAULT_PROMPT|SYSTEM\s*PROMPT|prompt\s+do\s+sistema|instru[cç][õo]es\s+internas|regras\s+internas|configura[cç][õo]es\s+do\s+sistema)\b/i,
-  /\bAtue\s+como\s+secret[áa]ria\b/i,
-  /CONTEXTO\s+TEMPORAL\s+INTERNO/i,
-  /INSTRU[CÇ][ÃA]O\s+(CR[ÍI]TICA|DE\s+DESENVOLVIMENTO)/i,
-  /^\s*[#`]{2,}/m,
-];
-const stripPromptLeak = (reply = "") => {
-  const text = String(reply || "");
-  if (!text.trim()) return text;
-  if (PROMPT_LEAK_PATTERNS.some((re) => re.test(text))) return SAFE_FALLBACK_REPLY;
-  return text;
-};
-const sanitizeOutbound = (reply) => enforceSecretarySecondPerson(stripPromptLeak(reply));
-
 const parseAgendamentoBlock = (text = "") => {
   const m = text.match(/<AGENDAMENTO>\s*([\s\S]*?)\s*<\/AGENDAMENTO>/i);
   if (!m) return null;
@@ -133,34 +107,6 @@ const createSupabaseAppointment = async (jid, payload) => {
     return null;
   }
   const phoneFromJid = String(jid || "").split("@")[0];
-  // 1) Cria o evento no Google Calendar (com Google Meet) via edge function
-  let meetingLink = null;
-  try {
-    const startsAt = new Date(`${payload.data_agendamento}T${String(payload.horario_agendamento).slice(0, 5)}:00-03:00`).toISOString();
-    const mr = await fetch(`${SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/create-meeting`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        apikey: APPT_KEY,
-        Authorization: `Bearer ${APPT_KEY}`,
-      },
-      body: JSON.stringify({
-        title: `Consulta — ${payload.area_juridica || "Atendimento jurídico"} · ${payload.nome || "Cliente"}`,
-        starts_at: startsAt,
-        duration_min: 60,
-        description: [payload.resumo_caso, payload.telefone ? `WhatsApp: ${payload.telefone}` : ""].filter(Boolean).join("\n"),
-        attendees: payload.email ? [{ email: payload.email, name: payload.nome }] : [],
-      }),
-    });
-    if (mr.ok) {
-      const mj = await mr.json();
-      meetingLink = mj?.meeting_link || null;
-    } else {
-      console.warn("create-meeting falhou:", mr.status, (await mr.text()).slice(0, 200));
-    }
-  } catch (e) {
-    console.warn("create-meeting erro:", e.message);
-  }
   const body = {
     user_id: null,
     client_name: payload.nome || "Cliente WhatsApp",
@@ -172,7 +118,6 @@ const createSupabaseAppointment = async (jid, payload) => {
     appointment_time: String(payload.horario_agendamento).slice(0, 5),
     source: "whatsapp",
     status: "scheduled",
-    meeting_link: meetingLink,
     raw_payload: { ...payload, jid, city: payload.cidade || null },
   };
   try {
@@ -192,8 +137,7 @@ const createSupabaseAppointment = async (jid, payload) => {
       return null;
     }
     console.log("agendamento criado via WhatsApp:", body.client_name, body.appointment_date, body.appointment_time);
-    const row = JSON.parse(raw || "[]")[0] || {};
-    return { ...row, meeting_link: meetingLink || row.meeting_link || null };
+    return JSON.parse(raw || "[]")[0] || true;
   } catch (e) {
     console.error("agendamento erro:", e.message);
     return null;
@@ -202,7 +146,7 @@ const createSupabaseAppointment = async (jid, payload) => {
 
 const connectionState = () => {
   if (state.connected) return "open";
-  if (state.qrDataUrl || state.qr) return "qr";
+  if (state.qrDataUrl) return "qr";
   if (state.lastError) return "offline";
   return "connecting";
 };
@@ -246,34 +190,10 @@ const isReplyableJid = (jid = "") => {
   return jid.endsWith("@s.whatsapp.net") || jid.endsWith("@lid") || jid.endsWith("@g.us");
 };
 
-const normalizePnJid = (jid = "") => {
-  const value = String(jid || "").trim();
-  if (!value) return "";
-  if (value.endsWith("@s.whatsapp.net")) return value;
-  const digits = value.replace(/@.+$/, "").replace(/\D/g, "");
-  return digits ? `${digits}@s.whatsapp.net` : "";
-};
-
-const getReplyTargetJid = (msg = {}) => {
-  const key = msg.key || {};
-  const remoteJid = key.remoteJid || "";
-  if (!remoteJid.endsWith("@lid")) return remoteJid;
-  return normalizePnJid(
-    key.remoteJidAlt ||
-    key.senderPn ||
-    key.participantAlt ||
-    key.participantPn ||
-    msg.participantAlt ||
-    msg.participantPn ||
-    msg.senderPn ||
-    "",
-  ) || remoteJid;
-};
-
 const rememberMessage = (jid, role, content) => {
   const history = conversationHistory.get(jid) || [];
-  history.push({ role, content: String(content || "").replace(/\s+/g, " ").trim().slice(0, 600) });
-  conversationHistory.set(jid, history.slice(-8));
+  history.push({ role, content: String(content || "").slice(0, 1200) });
+  conversationHistory.set(jid, history.slice(-12));
   return conversationHistory.get(jid);
 };
 
@@ -301,7 +221,7 @@ const getSaoPauloNow = () => {
 
 const buildTemporalSystemContext = () => {
   const now = getSaoPauloNow();
-  return `DATA/HORA ATUAL: ${now.br} (ISO ${now.date}, ${now.time}, Brasília). Use só quando o cliente perguntar data/hora ou quiser agendar; não invente atualização jurídica.`;
+  return `CONTEXTO TEMPORAL OBRIGATÓRIO: agora em Brasília/America/Sao_Paulo é ${now.br} (data ISO ${now.date}, hora ${now.time}). Use esta data para responder perguntas de data/hora e para converter termos como hoje/amanhã/segunda em agendamentos futuros.`;
 };
 
 // ============================================================
@@ -368,10 +288,14 @@ const buildSchedulingContext = async () => {
   const lines = available
     .map((d) => `- ${d.weekday} ${d.human} (${d.date}): ${d.slots.join(", ")}`)
     .join("\n");
-  return `AGENDA REAL (use só estes horários; não invente):
+  return `AGENDA REAL DA DRA. KÊNIA (consulte antes de oferecer horários — NÃO invente dias/horas):
 ${lines}
 
-AGENDAMENTO: ofereça 2 ou 3 opções da lista, confirme com o cliente e só então emita <AGENDAMENTO> com data/hora escolhida.`;
+REGRAS DE AGENDAMENTO:
+1. Ofereça SEMPRE 2 a 3 opções concretas tiradas EXCLUSIVAMENTE da lista acima (ex.: "posso oferecer terça 17/06 às 10h ou quinta 19/06 às 15h").
+2. Não sugira fim de semana nem horários fora da lista.
+3. Se o cliente recusar todas, pergunte preferência de turno (manhã/tarde) e ofereça outras opções AINDA da lista.
+4. Confirme com o cliente antes de fechar e só então emita o bloco <AGENDAMENTO> com a data/hora escolhida exatamente como aparece acima.`;
 };
 
 const userAskedTemporalInfo = (text = "") =>
@@ -442,78 +366,29 @@ const callLovableImage = async ({ prompt, style = "" }) => {
 const callEmergentChat = async ({ messages, key = "" }) => {
   const apiKey = key || state.settings.llm_text_key || EMERGENT_API_KEY;
   if (!apiKey) throw new Error("EMERGENT_API_KEY não configurada");
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), AI_FALLBACK_TIMEOUT_MS);
-  try {
-    const r = await fetch(`${EMERGENT_BASE_URL}/chat/completions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      signal: controller.signal,
-      body: JSON.stringify({ model: EMERGENT_TEXT_MODEL, messages }),
-    });
-    const raw = await r.text();
-    if (!r.ok) throw new Error(`emergent_chat_${r.status}: ${raw.slice(0, 500)}`);
-    const data = JSON.parse(raw || "{}");
-    const text = String(data?.choices?.[0]?.message?.content || "").trim();
-    if (!text) throw new Error("emergent_chat_empty_response");
-    return text;
-  } catch (e) {
-    throw new Error(e?.name === "AbortError" ? "emergent_timeout" : e.message);
-  } finally {
-    clearTimeout(timeout);
-  }
-};
-
-const callLovableChat = async ({ messages }) => {
-  if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY não configurada");
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), AI_FALLBACK_TIMEOUT_MS);
-  try {
-    const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${LOVABLE_API_KEY}` },
-      signal: controller.signal,
-      body: JSON.stringify({ model: "google/gemini-3-flash-preview", messages, temperature: 0.2, max_tokens: 140 }),
-    });
-    const raw = await r.text();
-    if (!r.ok) throw new Error(`lovable_chat_${r.status}: ${raw.slice(0, 300)}`);
-    const data = JSON.parse(raw || "{}");
-    const text = String(data?.choices?.[0]?.message?.content || "").trim();
-    if (!text) throw new Error("lovable_chat_empty_response");
-    return text;
-  } catch (e) {
-    throw new Error(e?.name === "AbortError" ? "lovable_timeout" : e.message);
-  } finally {
-    clearTimeout(timeout);
-  }
-};
-
-const withTimeout = (promise, ms, label) => {
-  let timer;
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`${label}_timeout`)), ms);
-    }),
-  ]).finally(() => clearTimeout(timer));
+  const r = await fetch(`${EMERGENT_BASE_URL}/chat/completions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify({ model: EMERGENT_TEXT_MODEL, messages }),
+  });
+  const raw = await r.text();
+  if (!r.ok) throw new Error(`emergent_chat_${r.status}: ${raw.slice(0, 500)}`);
+  const data = JSON.parse(raw || "{}");
+  const text = String(data?.choices?.[0]?.message?.content || "").trim();
+  if (!text) throw new Error("emergent_chat_empty_response");
+  return text;
 };
 
 async function generateDirectOllamaReply(messages) {
   if (!OLLAMA_BASE_URL) throw new Error("OLLAMA_BASE_URL não configurado no backend WhatsApp");
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), OLLAMA_CHAT_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), 45000);
   try {
     const r = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
       signal: controller.signal,
-      body: JSON.stringify({
-        model: OLLAMA_MODEL,
-        messages,
-        stream: false,
-        keep_alive: "10m",
-        options: { temperature: 0.15, num_ctx: 2048, num_predict: 140 },
-      }),
+      body: JSON.stringify({ model: OLLAMA_MODEL, messages, stream: false, options: { temperature: 0.2, num_predict: 220 } }),
     });
     const raw = await r.text();
     if (!r.ok) throw new Error(`ollama_${r.status}: ${raw.slice(0, 300)}`);
@@ -523,32 +398,6 @@ async function generateDirectOllamaReply(messages) {
     return reply;
   } catch (e) {
     throw new Error(e?.name === "AbortError" ? "ollama_timeout" : e.message);
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-async function generateAiRouterReply(messages) {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), AI_FALLBACK_TIMEOUT_MS);
-  try {
-    const r = await fetch(AI_ROUTER_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(SUPABASE_ANON_KEY ? { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } : {}),
-      },
-      signal: controller.signal,
-      body: JSON.stringify({ mode: "chat", messages, model: OLLAMA_MODEL }),
-    });
-    const raw = await r.text();
-    if (!r.ok) throw new Error(`ai-router_${r.status}: ${raw.slice(0, 300)}`);
-    const data = JSON.parse(raw || "{}");
-    const reply = String(data.text || data.response || "").trim();
-    if (!reply) throw new Error("ai-router_empty_response");
-    return { provider: data.provider ? `ai-router:${data.provider}` : "ai-router", text: reply };
-  } catch (e) {
-    throw new Error(e?.name === "AbortError" ? "ai-router_timeout" : e.message);
   } finally {
     clearTimeout(timeout);
   }
@@ -570,43 +419,59 @@ async function generateAiReply(jid, text) {
     ...history,
   ];
 
-  const failures = [];
-  const providers = [
-    { name: "ollama_direct", run: () => generateDirectOllamaReply(messages) },
-    { name: "lovable", run: async () => callLovableChat({ messages }) },
-    { name: "emergent", run: async () => callEmergentChat({ messages }) },
-    { name: "ai-router", run: () => generateAiRouterReply(messages) },
-  ];
-
-  for (const item of providers) {
-    try {
-      const out = await item.run();
-      const provider = typeof out === "object" ? out.provider || item.name : item.name;
-      const rawText = typeof out === "object" ? out.text : out;
-      const safeReply = sanitizeOutbound(String(rawText || "").trim());
-      if (!safeReply) throw new Error("empty_response");
-      rememberMessage(jid, "assistant", safeReply);
-      state.lastAiError = null;
-      state.lastAiProvider = provider;
-      state.lastAiFailureChain = failures;
-      return safeReply;
-    } catch (e) {
-      const entry = `${item.name}: ${e.message}`;
-      failures.push(entry);
-      state.lastAiError = failures.join(" | ");
-      state.lastAiFailureChain = failures;
-      console.warn(`[whatsapp-ai] ${item.name} falhou:`, e.message);
-    }
+  const emergentReply = await callEmergentChat({ messages }).catch((e) => {
+    state.lastAiError = e.message;
+    return null;
+  });
+  if (emergentReply) {
+    rememberMessage(jid, "assistant", emergentReply);
+    state.lastAiError = null;
+    return emergentReply;
   }
 
-  throw new Error(failures.join(" | ") || "no_ai_provider_available");
+  const directReply = await generateDirectOllamaReply(messages).catch((e) => {
+    state.lastAiError = e.message;
+    return null;
+  });
+  if (directReply) {
+    rememberMessage(jid, "assistant", directReply);
+    state.lastAiError = null;
+    return directReply;
+  }
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 25000);
+  try {
+    const r = await fetch(AI_ROUTER_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...(SUPABASE_ANON_KEY ? { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` } : {}),
+      },
+      signal: controller.signal,
+      body: JSON.stringify({ mode: "chat", provider: "ollama", messages, model: OLLAMA_MODEL }),
+    });
+    const raw = await r.text();
+    if (!r.ok) throw new Error(`ai-router_${r.status}: ${raw.slice(0, 300)}`);
+    const data = JSON.parse(raw || "{}");
+    const reply = String(data.text || data.response || "").trim();
+    if (!reply) throw new Error("ai-router_empty_response");
+    rememberMessage(jid, "assistant", reply);
+    state.lastAiError = null;
+    return reply;
+  } catch (e) {
+    const msg = e?.name === "AbortError" ? "ai-router_timeout" : e.message;
+    state.lastAiError = msg;
+    throw new Error(msg);
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function handleIncomingMessage(msg) {
   const jid = msg.key?.remoteJid;
-  const replyJid = getReplyTargetJid(msg);
   const id = msg.key?.id;
-  if (!state.config.bot_enabled || msg.key?.fromMe || !jid || !replyJid || !id || !msg.message || !isReplyableJid(replyJid)) return;
+  if (!state.config.bot_enabled || msg.key?.fromMe || !jid || !id || !msg.message || !isReplyableJid(jid)) return;
   if (processedMessages.has(id)) return;
   processedMessages.add(id);
   if (processedMessages.size > 500) processedMessages.clear();
@@ -615,39 +480,32 @@ async function handleIncomingMessage(msg) {
   if (!text) return;
 
   try {
-    await state.sock?.sendPresenceUpdate?.("composing", replyJid);
-    const rawReply = await withTimeout(generateAiReply(replyJid, text), AUTO_REPLY_TIMEOUT_MS, "auto_reply");
+    await state.sock?.sendPresenceUpdate?.("composing", jid);
+    const rawReply = await generateAiReply(jid, text);
     const agendamento = parseAgendamentoBlock(rawReply);
     let reply = stripAgendamentoBlock(rawReply);
     if (agendamento) {
-      const created = await createSupabaseAppointment(replyJid, agendamento);
+      const created = await createSupabaseAppointment(jid, agendamento);
       if (created) {
-        const link = created.meeting_link;
         if (!/agendad|confirmad|marcad/i.test(reply)) {
           reply = `${reply}\n\n✅ Sua consulta foi registrada no painel da Dra. Kênia.`.trim();
-        }
-        if (link && !reply.includes(link)) {
-          reply = `${reply}\n\n🔗 Link da videochamada (Google Meet): ${link}`.trim();
         }
       } else {
         reply = `${reply}\n\nAnotei seus dados; a Dra. Kênia confirmará o horário em breve.`.trim();
       }
     }
     if (!reply) reply = "Pode me confirmar essa informação, por favor?";
-    const sendOptions = jid.endsWith("@lid") ? {} : { quoted: msg };
-    const sent = await withTimeout(state.sock?.sendMessage(replyJid, { text: reply }, sendOptions), WHATSAPP_SEND_TIMEOUT_MS, "whatsapp_send");
+    await state.sock?.sendMessage(jid, { text: reply }, { quoted: msg });
     state.lastAutoReplyAt = Date.now();
-    state.lastSentMessageId = sent?.key?.id || null;
-    state.lastReplyTarget = replyJid;
     state.autoReplyCount += 1;
   } catch (e) {
     state.lastAiError = e.message;
     console.error("auto reply failed", e);
     try {
-      await withTimeout(state.sock?.sendMessage(replyJid, { text: "Tive uma instabilidade momentânea no atendimento. Pode me enviar sua mensagem novamente, por favor?" }), WHATSAPP_SEND_TIMEOUT_MS, "whatsapp_send_fallback");
+      await state.sock?.sendMessage(jid, { text: "Tive uma instabilidade momentânea no atendimento. Pode me enviar sua mensagem novamente, por favor?" }, { quoted: msg });
     } catch {}
   } finally {
-    try { await state.sock?.sendPresenceUpdate?.("paused", replyJid); } catch {}
+    try { await state.sock?.sendPresenceUpdate?.("paused", jid); } catch {}
   }
 }
 
@@ -745,55 +603,36 @@ app.get("/api/ai/ping", async (_req, res) => {
     reachable: false,
     tags_status: null,
     chat_ok: false,
-    fallback_ok: false,
-    fallback_provider: null,
     error: null,
-    fallback_error: null,
   };
-  if (!OLLAMA_BASE_URL) {
-    result.error = "OLLAMA_BASE_URL não definido no Render";
-  } else {
-    try {
-      const u = new URL(OLLAMA_BASE_URL);
-      result.is_public = !/^(localhost|127\.|0\.0\.0\.0|::1|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(u.hostname);
-    } catch { result.error = "OLLAMA_BASE_URL inválida"; }
-    if (result.is_public) {
-      try {
-        const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), 8000);
-        const r = await fetch(`${OLLAMA_BASE_URL}/api/tags`, { headers: { "ngrok-skip-browser-warning": "true" }, signal: ctrl.signal });
-        clearTimeout(t);
-        result.tags_status = r.status;
-        result.reachable = r.ok;
-        if (!r.ok) result.error = `tags HTTP ${r.status}`;
-      } catch (e) { result.error = `tags: ${e.message}`; }
-      if (result.reachable) {
-        try {
-          const ctrl = new AbortController();
-          const t = setTimeout(() => ctrl.abort(), 20000);
-          const r = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
-            signal: ctrl.signal,
-            body: JSON.stringify({ model: OLLAMA_MODEL, stream: false, messages: [{ role: "user", content: "ping" }], options: { num_predict: 8 } }),
-          });
-          clearTimeout(t);
-          const data = await r.json().catch(() => ({}));
-          result.chat_ok = r.ok && !!(data?.message?.content);
-          if (!result.chat_ok) result.error = `chat HTTP ${r.status}: ${data?.error || ""}`;
-        } catch (e) { result.error = `chat: ${e.message}`; }
-      }
-    }
-  }
-  if (!result.chat_ok) {
-    try {
-      const fallback = await generateAiRouterReply([{ role: "user", content: "Responda apenas: ok" }]);
-      result.fallback_ok = !!fallback?.text;
-      result.fallback_provider = fallback?.provider || "ai-router";
-    } catch (e) {
-      result.fallback_error = e.message;
-    }
-  }
+  if (!OLLAMA_BASE_URL) { result.error = "OLLAMA_BASE_URL não definido no Render"; return res.json(result); }
+  try {
+    const u = new URL(OLLAMA_BASE_URL);
+    result.is_public = !/^(localhost|127\.|0\.0\.0\.0|::1|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(u.hostname);
+  } catch { result.error = "OLLAMA_BASE_URL inválida"; return res.json(result); }
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 8000);
+    const r = await fetch(`${OLLAMA_BASE_URL}/api/tags`, { headers: { "ngrok-skip-browser-warning": "true" }, signal: ctrl.signal });
+    clearTimeout(t);
+    result.tags_status = r.status;
+    result.reachable = r.ok;
+    if (!r.ok) result.error = `tags HTTP ${r.status}`;
+  } catch (e) { result.error = `tags: ${e.message}`; return res.json(result); }
+  try {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), 20000);
+    const r = await fetch(`${OLLAMA_BASE_URL}/api/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "ngrok-skip-browser-warning": "true" },
+      signal: ctrl.signal,
+      body: JSON.stringify({ model: OLLAMA_MODEL, stream: false, messages: [{ role: "user", content: "ping" }], options: { num_predict: 8 } }),
+    });
+    clearTimeout(t);
+    const data = await r.json().catch(() => ({}));
+    result.chat_ok = r.ok && !!(data?.message?.content);
+    if (!result.chat_ok) result.error = `chat HTTP ${r.status}: ${data?.error || ""}`;
+  } catch (e) { result.error = `chat: ${e.message}`; }
   res.json(result);
 });
 
@@ -864,7 +703,7 @@ app.put("/api/whatsapp/config", auth, (req, res) => {
 app.get("/api/whatsapp/diagnostics", auth, (_req, res) => {
   res.json({ ok: true, static_mode: false, checks: [
     { id: "baileys-backend", ok: true, label: "Backend Baileys ativo", msg: "Serviço WhatsApp publicado e respondendo.", hint: state.connected ? "WhatsApp conectado." : state.qrDataUrl ? "QR Code disponível para leitura." : "Se ficar inicializando por mais de 30s, gere uma nova sessão." },
-    { id: "auto-reply", ok: !state.lastAiError && (!!OLLAMA_BASE_URL || !!AI_ROUTER_URL || !!EMERGENT_API_KEY), label: "Resposta automática IA", msg: state.lastAiError ? `Última falha: ${state.lastAiError}` : `Último provedor OK: ${state.lastAiProvider || (OLLAMA_BASE_URL ? "ollama_direct" : "aguardando teste")}.`, hint: state.lastAutoReplyAt ? `Última resposta enviada: ${new Date(state.lastAutoReplyAt).toLocaleString("pt-BR")}` : "Envie uma mensagem para este WhatsApp para testar a resposta automática." },
+    { id: "ollama", ok: !state.lastAiError && (!!OLLAMA_BASE_URL || !!AI_ROUTER_URL), label: "Resposta automática IA", msg: state.lastAiError ? `Última falha: ${state.lastAiError}` : (OLLAMA_BASE_URL ? "Backend ligado direto ao Ollama." : "Backend ligado ao ai-router/Ollama."), hint: state.lastAutoReplyAt ? `Última resposta enviada: ${new Date(state.lastAutoReplyAt).toLocaleString("pt-BR")}` : "Envie uma mensagem para este WhatsApp para testar a resposta automática." },
   ] });
 });
 
@@ -877,8 +716,7 @@ app.get("/api/whatsapp/baileys/status", auth, (_req, res) => {
   res.json({
     connected: state.connected,
     state: connectionState(),
-    hasQr: !!(state.qrDataUrl || state.qr),
-    hasRawQr: !!state.qr,
+    hasQr: !!state.qrDataUrl,
     startingAt: state.startingAt,
     secondsWaiting,
     last_error: state.lastError,
@@ -887,11 +725,7 @@ app.get("/api/whatsapp/baileys/status", auth, (_req, res) => {
     ai_router_url: AI_ROUTER_URL,
     ollama_model: OLLAMA_MODEL,
     last_ai_error: state.lastAiError,
-    last_ai_provider: state.lastAiProvider,
-    last_ai_failure_chain: state.lastAiFailureChain,
     last_auto_reply_at: state.lastAutoReplyAt,
-    last_sent_message_id: state.lastSentMessageId,
-    last_reply_target: state.lastReplyTarget,
     auto_reply_count: state.autoReplyCount,
   });
 });
@@ -907,7 +741,7 @@ app.get("/api/whatsapp/baileys/qr", auth, (_req, res) => {
 app.post("/api/whatsapp/baileys/restart", auth, async (_req, res) => {
   try {
     await startSock();
-    res.json({ ok: true, connected: state.connected, state: connectionState(), qr: state.qrDataUrl, raw: state.qr });
+    res.json({ ok: true, connected: state.connected, state: connectionState(), qr: state.qrDataUrl });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -916,7 +750,7 @@ app.post("/api/whatsapp/baileys/restart", auth, async (_req, res) => {
 app.post("/api/whatsapp/baileys/reconnect", auth, async (_req, res) => {
   try {
     await startSock();
-    res.json({ ok: true, connected: state.connected, state: connectionState(), qr: state.qrDataUrl, raw: state.qr });
+    res.json({ ok: true, connected: state.connected, state: connectionState(), qr: state.qrDataUrl });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -926,7 +760,7 @@ app.post("/api/whatsapp/baileys/reset-session", auth, async (_req, res) => {
   try {
     state.qrAttempts = 0;
     await startSock({ clearAuth: true });
-    res.json({ ok: true, connected: false, state: connectionState(), qr: state.qrDataUrl, raw: state.qr });
+    res.json({ ok: true, connected: false, state: connectionState(), qr: state.qrDataUrl });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -938,9 +772,8 @@ app.post("/api/whatsapp/baileys/logout", auth, async (_req, res) => {
     state.connected = false;
     state.qr = null;
     state.qrDataUrl = null;
-    state.qrAttempts = 0;
-    await startSock({ clearAuth: true });
-    res.json({ ok: true, connected: false, state: connectionState(), qr: state.qrDataUrl, raw: state.qr });
+    await startSock();
+    res.json({ ok: true, connected: false, state: "connecting" });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -952,8 +785,7 @@ app.post("/api/whatsapp/logout", auth, async (_req, res) => {
     state.connected = false;
     state.qr = null;
     state.qrDataUrl = null;
-    await resetAuthSession();
-    res.json({ ok: true, connected: false, state: connectionState() });
+    res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

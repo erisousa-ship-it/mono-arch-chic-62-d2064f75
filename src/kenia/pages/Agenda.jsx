@@ -140,16 +140,14 @@ export default function Agenda() {
 
   return (
     <div className="h-screen flex flex-col bg-nude-50 overflow-hidden">
-      <div className="px-4 sm:px-6 py-4 bg-white border-b border-nude-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div className="px-6 py-4 bg-white border-b border-nude-200 flex items-center justify-between">
         <div>
           <div className="text-xs tracking-widest uppercase text-gold-600 font-semibold">Calendário</div>
-          <h1 className="font-display font-bold text-xl sm:text-2xl">Agenda de Reuniões</h1>
+          <h1 className="font-display font-bold text-2xl">Agenda de Reuniões</h1>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button variant="outline" size="sm" className="border-nude-300 flex-1 sm:flex-none" onClick={syncDeadlines} disabled={syncingDeadlines} data-testid="sync-deadlines-btn">
-            <RefreshCw className={`w-4 h-4 sm:mr-2 ${syncingDeadlines ? "animate-spin" : ""}`} />
-            <span className="hidden sm:inline">Sincronizar prazos</span>
-            <span className="sm:hidden ml-1">Sincronizar</span>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" className="border-nude-300" onClick={syncDeadlines} disabled={syncingDeadlines} data-testid="sync-deadlines-btn">
+            <RefreshCw className={`w-4 h-4 mr-2 ${syncingDeadlines ? "animate-spin" : ""}`} /> Sincronizar prazos
           </Button>
           <div className="inline-flex border border-nude-200 rounded-md p-0.5 bg-white">
             <Button size="sm" variant={view === "calendar" ? "default" : "ghost"} className="h-7" onClick={() => setView("calendar")}>Mês</Button>
@@ -157,13 +155,11 @@ export default function Agenda() {
           </div>
           <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-              <Button size="sm" className="bg-nude-900 hover:bg-nude-800 flex-1 sm:flex-none" data-testid="new-appt-btn">
-                <Plus className="w-4 h-4 sm:mr-2" />
-                <span className="hidden sm:inline">Nova reunião</span>
-                <span className="sm:hidden ml-1">Nova</span>
+              <Button className="bg-nude-900 hover:bg-nude-800" data-testid="new-appt-btn">
+                <Plus className="w-4 h-4 mr-2" /> Nova reunião
               </Button>
             </DialogTrigger>
-            <DialogContent className="max-w-[95vw] sm:max-w-lg max-h-[90vh] overflow-y-auto">
+            <DialogContent>
               <DialogHeader><DialogTitle>Nova Reunião</DialogTitle></DialogHeader>
               <div className="space-y-3">
                 <div><Label>Título</Label><Input placeholder="Ex: Consulta inicial - Divorcio" value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} data-testid="appt-title" /></div>
@@ -202,9 +198,9 @@ export default function Agenda() {
         </div>
       </div>
 
-      <div className="flex-1 overflow-auto p-3 sm:p-6">
+      <div className="flex-1 overflow-auto p-6">
         <Card className="mb-5 border-rose-200 bg-rose-50/40 p-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="flex items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2 text-sm font-semibold text-rose-800">
                 <BellRing className="h-4 w-4" /> Intimações e prazos
@@ -213,7 +209,7 @@ export default function Agenda() {
                 Monitoramento preparado para Escavador, Jusbrasil e Data Lawyer; se um provedor falhar, o alerta permanece no app.
               </div>
             </div>
-            <Badge className="bg-white text-rose-700 border border-rose-200 hover:bg-white self-start sm:self-auto">
+            <Badge className="bg-white text-rose-700 border border-rose-200 hover:bg-white">
               {deadlines.filter((d) => d.status !== "done").length} pendente(s)
             </Badge>
           </div>
@@ -251,31 +247,31 @@ export default function Agenda() {
         </Card>
 
         {view === "calendar" && (
-          <Card className="border-nude-200 p-2 sm:p-5 overflow-x-auto">
+          <Card className="border-nude-200 p-5">
             <div className="flex items-center justify-between mb-4">
               <Button variant="ghost" size="icon" onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}>
                 <ChevronLeft className="w-4 h-4" />
               </Button>
-              <div className="font-display font-semibold text-base sm:text-lg capitalize">{monthLabel}</div>
+              <div className="font-display font-semibold text-lg capitalize">{monthLabel}</div>
               <Button variant="ghost" size="icon" onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}>
                 <ChevronRight className="w-4 h-4" />
               </Button>
             </div>
             <div className="grid grid-cols-7 gap-px bg-nude-200 rounded-md overflow-hidden text-xs">
               {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"].map(d => (
-                <div key={d} className="bg-nude-50 py-2 text-center font-semibold text-nude-600 text-[10px] sm:text-xs">{d}</div>
+                <div key={d} className="bg-nude-50 py-2 text-center font-semibold text-nude-600">{d}</div>
               ))}
               {Array(firstDayOfWeek).fill(0).map((_, i) => (
-                <div key={`e${i}`} className="bg-white min-h-[60px] sm:min-h-[90px]" />
+                <div key={`e${i}`} className="bg-white min-h-[90px]" />
               ))}
               {Array(daysInMonth).fill(0).map((_, i) => {
                 const day = i + 1;
                 const isToday = day === new Date().getDate() && cursor.getMonth() === new Date().getMonth() && cursor.getFullYear() === new Date().getFullYear();
                 const dayItems = itemsByDay[day] || [];
                 return (
-                  <div key={day} className={`bg-white min-h-[60px] sm:min-h-[90px] p-1 sm:p-1.5 ${isToday ? "ring-2 ring-gold-400 ring-inset" : ""}`}>
+                  <div key={day} className={`bg-white min-h-[90px] p-1.5 ${isToday ? "ring-2 ring-gold-400 ring-inset" : ""}`}>
                     <div className={`text-right font-semibold text-xs ${isToday ? "text-gold-600" : "text-nude-700"}`}>{day}</div>
-                    <div className="mt-1 space-y-0.5 hidden sm:block">
+                    <div className="mt-1 space-y-0.5">
                       {dayItems.slice(0, 3).map(it => (
                         <div key={it.id} className="truncate text-[10px] bg-nude-900 text-white px-1 py-0.5 rounded">
                           {new Date(it.starts_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })} {it.title}
@@ -285,11 +281,6 @@ export default function Agenda() {
                         <div className="text-[10px] text-nude-500">+{dayItems.length - 3} mais</div>
                       )}
                     </div>
-                    {dayItems.length > 0 && (
-                      <div className="sm:hidden mt-1 flex justify-center">
-                        <span className="inline-block w-1.5 h-1.5 rounded-full bg-nude-900" />
-                      </div>
-                    )}
                   </div>
                 );
               })}
@@ -309,40 +300,40 @@ export default function Agenda() {
               const timeLabel = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
               const meetingLink = it.meeting_link || it.meet_url;
               return (
-                <Card key={it.id} className="p-3 sm:p-4 border-nude-200 hover:shadow-sm transition-shadow" data-testid={`appt-${it.id}`}>
-                  <div className="flex items-start gap-3 sm:gap-4">
-                    <div className="text-center min-w-[56px] sm:min-w-[70px] border-r border-nude-200 pr-3 sm:pr-4">
+                <Card key={it.id} className="p-4 border-nude-200 hover:shadow-sm transition-shadow" data-testid={`appt-${it.id}`}>
+                  <div className="flex items-start gap-4">
+                    <div className="text-center min-w-[70px] border-r border-nude-200 pr-4">
                       <div className="text-[10px] text-nude-500 uppercase tracking-widest">{dateLabel.split(" ")[0]}</div>
-                      <div className="font-display font-bold text-xl sm:text-2xl text-nude-900">{d.getDate()}</div>
+                      <div className="font-display font-bold text-2xl text-nude-900">{d.getDate()}</div>
                       <div className="text-xs text-nude-500 capitalize">{dateLabel.split(" ")[2]}</div>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 sm:gap-3">
+                      <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="font-medium text-nude-900">{it.title}</div>
-                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 mt-1 text-xs sm:text-sm text-nude-600">
+                          <div className="flex items-center gap-3 mt-1 text-sm text-nude-600">
                             <span className="flex items-center gap-1"><Clock className="w-3.5 h-3.5" />{timeLabel} · {it.duration_min}min</span>
                             {it.client_name && <span className="flex items-center gap-1"><User className="w-3.5 h-3.5" />{it.client_name}</span>}
                             <span className="flex items-center gap-1"><Video className="w-3.5 h-3.5" />{it.location}</span>
                           </div>
                           {it.notes && <div className="text-xs text-nude-500 mt-1.5 line-clamp-2">{it.notes}</div>}
                           {meetingLink && (
-                            <div className="flex items-center gap-2 mt-2 min-w-0">
-                              <Link2 className="w-3.5 h-3.5 text-gold-600 shrink-0" />
-                              <a href={meetingLink} target="_blank" rel="noreferrer" className="text-xs text-gold-700 hover:underline truncate min-w-0 flex-1">
+                            <div className="flex items-center gap-2 mt-2">
+                              <Link2 className="w-3.5 h-3.5 text-gold-600" />
+                              <a href={meetingLink} target="_blank" rel="noreferrer" className="text-xs text-gold-700 hover:underline truncate max-w-md">
                                 {meetingLink}
                               </a>
-                              <Button variant="ghost" size="icon" className="h-6 w-6 shrink-0" onClick={() => copyLink(meetingLink)}>
+                              <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => copyLink(meetingLink)}>
                                 <Copy className="w-3 h-3" />
                               </Button>
                             </div>
                           )}
                         </div>
-                        <Badge className={`${STATUS_COLORS[it.status]} hover:${STATUS_COLORS[it.status]} shrink-0 self-start`}>
+                        <Badge className={`${STATUS_COLORS[it.status]} hover:${STATUS_COLORS[it.status]} shrink-0`}>
                           {it.status}
                         </Badge>
                       </div>
-                      <div className="flex flex-wrap gap-1.5 mt-3 pt-3 border-t border-nude-100">
+                      <div className="flex gap-1.5 mt-3 pt-3 border-t border-nude-100">
                         <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => toggleStatus(it, "confirmado")}>
                           <CheckCircle2 className="w-3 h-3 mr-1 text-gold-600" /> Confirmar
                         </Button>
@@ -352,7 +343,7 @@ export default function Agenda() {
                         <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => toggleStatus(it, "cancelado")}>
                           <XCircle className="w-3 h-3 mr-1 text-rose-500" /> Cancelar
                         </Button>
-                        <Button variant="ghost" size="sm" className="h-7 text-xs sm:ml-auto text-rose-500 hover:text-rose-600" onClick={() => remove(it.id)}>
+                        <Button variant="ghost" size="sm" className="h-7 text-xs ml-auto text-rose-500 hover:text-rose-600" onClick={() => remove(it.id)}>
                           <Trash2 className="w-3 h-3 mr-1" /> Excluir
                         </Button>
                       </div>
