@@ -45,13 +45,37 @@ Deno.serve(async (req) => {
 
     const errors: string[] = [];
 
-    // 1) PRIMÁRIO: Lovable AI Gateway (Nano Banana / gpt-image-2)
+    // 1) PRIMÁRIO GRATUITO: Pollinations.ai (sem API key, sem crédito)
+    // Mantido antes dos provedores pagos para nunca quebrar com 402 de créditos.
+    try {
+      const seed = Math.floor(Math.random() * 1_000_000);
+      const polUrl =
+        `https://image.pollinations.ai/prompt/${encodeURIComponent(userText)}` +
+        `?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
+      const polResp = await fetch(polUrl);
+      if (polResp.ok) {
+        const buf = new Uint8Array(await polResp.arrayBuffer());
+        let bin = "";
+        for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+        const b64 = btoa(bin);
+        const dataUrl = `data:image/png;base64,${b64}`;
+        return new Response(
+          JSON.stringify({ image_data_url: dataUrl, b64_json: b64, provider: "pollinations", model: "flux" }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      errors.push(`pollinations_${polResp.status}`);
+    } catch (e) {
+      errors.push(`pollinations: ${String(e)}`);
+    }
+
+    // 2) FALLBACK: Lovable AI Gateway (Nano Banana / gpt-image-2)
     const lovableKey = Deno.env.get("LOVABLE_API_KEY");
     if (lovableKey) {
       try {
         const resp = await fetch("https://ai.gateway.lovable.dev/v1/images/generations", {
           method: "POST",
-          headers: { Authorization: `Bearer ${lovableKey}`, "Content-Type": "application/json" },
+          headers: { "Lovable-API-Key": lovableKey, "Content-Type": "application/json" },
           body: JSON.stringify({
             model: "openai/gpt-image-2",
             prompt: userText,
@@ -82,7 +106,7 @@ Deno.serve(async (req) => {
       errors.push("Missing LOVABLE_API_KEY");
     }
 
-    // 2) FALLBACK: Emergent
+    // 3) FALLBACK: Emergent
     const emergentKey = Deno.env.get("EMERGENT_API_KEY");
     const emergentUrl = (Deno.env.get("EMERGENT_BASE_URL") || "https://api.emergent.sh/v1").replace(/\/+$/, "");
     if (emergentKey) {
@@ -111,7 +135,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // 3) FALLBACK: Google Gemini (Nano Banana) direct API
+    // 4) FALLBACK: Google Gemini (Nano Banana) direct API
     const geminiKey = Deno.env.get("GEMINI_API_KEY");
     if (geminiKey) {
       try {
@@ -156,29 +180,6 @@ Deno.serve(async (req) => {
       } catch (e) {
         errors.push(`gemini: ${String(e)}`);
       }
-    }
-
-    // 4) FALLBACK GRATUITO: Pollinations.ai (sem API key, sem crédito)
-    try {
-      const seed = Math.floor(Math.random() * 1_000_000);
-      const polUrl =
-        `https://image.pollinations.ai/prompt/${encodeURIComponent(userText)}` +
-        `?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
-      const polResp = await fetch(polUrl);
-      if (polResp.ok) {
-        const buf = new Uint8Array(await polResp.arrayBuffer());
-        let bin = "";
-        for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
-        const b64 = btoa(bin);
-        const dataUrl = `data:image/png;base64,${b64}`;
-        return new Response(
-          JSON.stringify({ image_data_url: dataUrl, b64_json: b64, provider: "pollinations", model: "flux" }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
-      }
-      errors.push(`pollinations_${polResp.status}`);
-    } catch (e) {
-      errors.push(`pollinations: ${String(e)}`);
     }
 
     return new Response(JSON.stringify({ error: errors.join(" | ") || "Sem provedor de imagem disponível" }), {
