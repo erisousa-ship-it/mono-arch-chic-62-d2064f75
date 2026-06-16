@@ -1440,7 +1440,30 @@ const staticPost = (url, body = {}) => {
   if (path === "/creatives/generate") {
     return (async () => {
       const topic = body.topic || body.title || body.prompt || "post jurídico";
+      const title = body.title || body.topic || "";
       const styleHint = `${body.network || "instagram"} ${body.format || "post"}${body.case_type ? ` — área ${body.case_type}` : ""}${body.tone ? `, tom ${body.tone}` : ""}`;
+      // Expande o tema em uma cena visual detalhada (sem precisar buscar na internet em runtime,
+      // usa um dicionário de cenas de referência típicas do nicho jurídico/cotidiano).
+      const expandScene = (raw) => {
+        const t = String(raw || "").toLowerCase();
+        const refs = [
+          { kw: ["demit", "demiss", "desligad", "mandad embora"], scene: "um trabalhador brasileiro de uniforme/escritório recebendo aviso de demissão das mãos do gestor, com expressão preocupada, caixa de pertences sobre a mesa, ambiente corporativo realista" },
+          { kw: ["hora extra", "jornada", "horário"], scene: "trabalhador conferindo o relógio de ponto em um escritório, semblante cansado, luz de fim de tarde entrando pela janela" },
+          { kw: ["assédio", "assedi"], scene: "funcionária em uma sala de reunião visivelmente desconfortável, chefe em segundo plano desfocado, atmosfera tensa e séria" },
+          { kw: ["acident", "trabalho insalu", "epi"], scene: "trabalhador de capacete e colete em obra/indústria, com curativo no braço, conversando com colega" },
+          { kw: ["pensão", "alimentíc"], scene: "mãe e criança em casa simples olhando uma conta sobre a mesa, expressão de preocupação" },
+          { kw: ["divórcio", "divorc", "separaç"], scene: "casal sentado em lados opostos de uma mesa de advogado assinando documentos, alianças sobre os papéis" },
+          { kw: ["herança", "inventár", "sucess"], scene: "família reunida em escritório de advocacia analisando documentos antigos e fotografias de família" },
+          { kw: ["inss", "aposenta", "benefíci"], scene: "pessoa idosa brasileira em frente a uma agência do INSS segurando documentos, expressão esperançosa" },
+          { kw: ["consumidor", "produto", "compra"], scene: "consumidora frustrada ao telefone segurando um produto com defeito e a nota fiscal" },
+          { kw: ["dívid", "negativ", "spc", "serasa"], scene: "pessoa em casa olhando o celular com cara de alívio, papéis de dívida rasgados sobre a mesa" },
+          { kw: ["financiamento", "imóvel", "imovel"], scene: "casal jovem recebendo chaves de uma casa das mãos de um corretor, sorrisos discretos" },
+          { kw: ["motorista", "uber", "aplicativo"], scene: "motorista de aplicativo dentro do carro, celular no suporte, expressão concentrada no trânsito urbano brasileiro" },
+        ];
+        const hit = refs.find((r) => r.kw.some((k) => t.includes(k)));
+        return hit ? hit.scene : `cena realista e literal representando: ${raw}`;
+      };
+      const sceneDescription = expandScene(topic);
       let b64 = "";
       let genError = null;
       // 1) Provedor rápido opcional. Por padrão pulamos para usar a função com filtros melhores contra deformações.
@@ -1509,11 +1532,11 @@ const staticPost = (url, body = {}) => {
       // 3) Fallback gratuito: Pollinations.ai (flux) direto do navegador.
       if (!b64) {
       try {
-        // Coloca a CENA pedida pelo usuário em primeiro plano para a IA obedecer literalmente
-        // (ex.: "trabalhador sendo demitido" => mostra trabalhador sendo demitido).
+        // Prompt enriquecido: TÍTULO + CENA DETALHADA + estilo, para o gerador obedecer literalmente.
         const polPrompt =
-          `Fotografia editorial cinematográfica, ultra realista, mostrando literalmente a cena: ${topic}. ` +
-          `A cena deve ser claramente reconhecível e fiel ao tema descrito, com no máximo 1 ou 2 personagens principais. ` +
+          `[TÍTULO: ${title}] Fotografia editorial cinematográfica ultra realista representando: ${sceneDescription}. ` +
+          `Tema literal pedido: "${topic}". A cena deve ser inequívoca e fiel ao título, com no máximo 1 ou 2 personagens principais. ` +
+          `Estilo de referência: fotojornalismo brasileiro contemporâneo, semelhante a imagens de banco como Getty Images / Unsplash. ` +
           `Rostos nítidos, em foco perfeito, traços faciais bem definidos, olhos nítidos, pele detalhada, ` +
           `lente 50mm f/2.8, plano médio, foco preciso no rosto, sem close-up extremo, sem desfoque facial, alta definição 8k, sharp focus on faces. ` +
           `Iluminação profissional, composição para ${styleHint}, paleta nude/dourada sutil, ` +
