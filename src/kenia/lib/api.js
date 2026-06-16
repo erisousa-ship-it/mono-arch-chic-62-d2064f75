@@ -1400,7 +1400,12 @@ const staticPost = (url, body = {}) => {
   if (path === "/processes") return insertItem("processes", seedProcesses, "proc", body);
   if (path === "/creatives/generate") {
     return (async () => {
-      const topic = body.topic || body.title || body.prompt || "post jurídico";
+      const topicText = String(body.topic || body.prompt || "").trim();
+      const titleText = String(body.title || "").trim();
+      const topic = [
+        topicText || titleText || "post jurídico",
+        titleText && !topicText.toLowerCase().includes(titleText.toLowerCase()) ? `Contexto do título: ${titleText}` : "",
+      ].filter(Boolean).join(". ");
       const styleHint = `${body.network || "instagram"} ${body.format || "post"}${body.case_type ? ` — área ${body.case_type}` : ""}${body.tone ? `, tom ${body.tone}` : ""}`;
       let b64 = "";
       let genError = null;
