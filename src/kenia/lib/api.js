@@ -43,6 +43,13 @@ const inDays = (days) => {
   return d.toISOString();
 };
 
+const escapeSvgText = (value) => String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+const makeLocalCreativeImage = (topic = "post jurídico") => {
+  const title = escapeSvgText(topic).slice(0, 86);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f7efe8"/><stop offset="0.52" stop-color="#d8b980"/><stop offset="1" stop-color="#1d1714"/></linearGradient><radialGradient id="light" cx="32%" cy="24%" r="58%"><stop offset="0" stop-color="#fffaf3" stop-opacity="0.95"/><stop offset="1" stop-color="#fffaf3" stop-opacity="0"/></radialGradient></defs><rect width="1024" height="1024" fill="url(#bg)"/><rect width="1024" height="1024" fill="url(#light)"/><path d="M148 228h728v568H148z" fill="none" stroke="#fff7e8" stroke-width="5" opacity="0.72"/><path d="M512 286l88 306H424l88-306z" fill="#2b211b" opacity="0.82"/><path d="M350 626h324M392 690h240" stroke="#fff1d0" stroke-width="18" stroke-linecap="round" opacity="0.86"/><circle cx="512" cy="246" r="35" fill="#fff1d0"/><text x="512" y="820" text-anchor="middle" font-family="Georgia, serif" font-size="42" fill="#fff7e8">Dra. Kênia Garcia</text><text x="512" y="874" text-anchor="middle" font-family="Arial, sans-serif" font-size="24" fill="#fff7e8" opacity="0.9">${title}</text></svg>`;
+  return `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svg)))}`;
+};
+
 const SECRETARIA_JURIDICA_PROMPT = `# SECRETÁRIA JURÍDICA DA DRA. KÊNIA GARCIA
 
 Você é a secretária pessoal da Dra. Kênia Garcia e realiza atendimento pelo WhatsApp.
