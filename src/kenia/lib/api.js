@@ -1389,35 +1389,32 @@ const staticPost = (url, body = {}) => {
       const styleHint = `${body.network || "instagram"} ${body.format || "post"}${body.case_type ? ` — área ${body.case_type}` : ""}${body.tone ? `, tom ${body.tone}` : ""}`;
       let b64 = "";
       let genError = null;
-      // 1) Lovable AI via Supabase edge function (LOVABLE_API_KEY nativo, sem config no Render).
+      // 1) Fallback gratuito: Pollinations.ai direto do navegador (sem API key, sem crédito).
       try {
-        const { data, error } = await supabase.functions.invoke("generate-cover-image", {
-          body: {
-            prompt: topic,
-            style: styleHint,
-            reference_image_base64: body.reference_image_base64 || null,
-            logo_base64: body.logo_base64 || null,
-          },
-        });
-        if (error) {
-          let detail = error?.message || String(error);
-          try {
-            const ctxJson = await error?.context?.json?.();
-            if (ctxJson?.error) detail = typeof ctxJson.error === "string" ? ctxJson.error : JSON.stringify(ctxJson.error);
-            if (ctxJson?.upstream_status === 402 || /not enough credits|payment_required/i.test(detail)) {
-              detail = "Créditos da Lovable AI esgotados. Recarregue em Configurações → Cloud & AI balance.";
-            }
-          } catch { /* ignore */ }
-          genError = detail;
-          throw new Error(detail);
+        const polPrompt =
+          `Banner profissional para advocacia (Dra. Kênia Garcia), estilo cinematográfico, ` +
+          `paleta nude/dourada, sem texto e sem letras. Tema: ${topic}. Estilo: ${styleHint}.`;
+        const seed = Math.floor(Math.random() * 1_000_000);
+        const polUrl =
+          `https://image.pollinations.ai/prompt/${encodeURIComponent(polPrompt)}` +
+          `?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
+        const polResp = await fetch(polUrl);
+        if (polResp.ok) {
+          const blob = await polResp.blob();
+          b64 = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(String(reader.result || ""));
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          });
+          if (b64) genError = null;
+        } else {
+          genError = genError || `pollinations_${polResp.status}`;
         }
-        b64 = data?.image_data_url || data?.b64_json || "";
-        if (b64 && !b64.startsWith("data:")) b64 = `data:image/png;base64,${b64}`;
-        if (!b64 && data?.error) genError = data.error;
       } catch (e) {
         genError = genError || e?.message || String(e);
       }
-      // 2) Fallback: backend Render (caso a edge function falhe).
+      // 2) Backend Render (caso Pollinations falhe).
       if (!b64) {
         try {
           const res = await liveRequest("post", "/generate-image", {
@@ -1437,28 +1434,31 @@ const staticPost = (url, body = {}) => {
           genError = genError || e?.response?.data?.error || e?.message || String(e);
         }
       }
-      // 3) Fallback gratuito: Pollinations.ai direto do navegador (sem API key, sem crédito).
+      // 3) Lovable AI via Supabase edge function só como último recurso pago.
       if (!b64) {
         try {
-          const polPrompt =
-            `Banner profissional para advocacia (Dra. Kênia Garcia), estilo cinematográfico, ` +
-            `paleta nude/dourada, sem texto e sem letras. Tema: ${topic}. Estilo: ${styleHint}.`;
-          const seed = Math.floor(Math.random() * 1_000_000);
-          const polUrl =
-            `https://image.pollinations.ai/prompt/${encodeURIComponent(polPrompt)}` +
-            `?width=1024&height=1024&nologo=true&seed=${seed}&model=flux`;
-          const polResp = await fetch(polUrl);
-          if (polResp.ok) {
-            const blob = await polResp.blob();
-            b64 = await new Promise((resolve, reject) => {
-              const reader = new FileReader();
-              reader.onloadend = () => resolve(String(reader.result || ""));
-              reader.onerror = reject;
-              reader.readAsDataURL(blob);
-            });
-            if (b64) genError = null;
+          const { data, error } = await supabase.functions.invoke("generate-cover-image", {
+            body: {
+              prompt: topic,
+              style: styleHint,
+              reference_image_base64: body.reference_image_base64 || null,
+              logo_base64: body.logo_base64 || null,
+            },
+          });
+          if (error) {
+            let detail = error?.message || String(error);
+            try {
+              const ctxJson = await error?.context?.json?.();
+              if (ctxJson?.error) detail = typeof ctxJson.error === "string" ? ctxJson.error : JSON.stringify(ctxJson.error);
+              if (ctxJson?.upstream_status === 402 || /not enough credits|payment_required/i.test(detail)) {
+                detail = "Créditos da Lovable AI esgotados.";
+              }
+            } catch { /* ignore */ }
+            genError = genError || detail;
           } else {
-            genError = genError || `pollinations_${polResp.status}`;
+            b64 = data?.image_data_url || data?.b64_json || "";
+            if (b64 && !b64.startsWith("data:")) b64 = `data:image/png;base64,${b64}`;
+            if (!b64 && data?.error) genError = genError || data.error;
           }
         } catch (e) {
           genError = genError || e?.message || String(e);
