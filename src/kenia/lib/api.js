@@ -1404,7 +1404,8 @@ const staticPost = (url, body = {}) => {
       const styleHint = `${body.network || "instagram"} ${body.format || "post"}${body.case_type ? ` — área ${body.case_type}` : ""}${body.tone ? `, tom ${body.tone}` : ""}`;
       let b64 = "";
       let genError = null;
-      // 1) PRIMÁRIO GRATUITO: Pollinations.ai (flux). Evita 402 por falta de créditos e mantém a tela funcionando.
+      // 1) Provedor rápido opcional. Por padrão pulamos para usar a função com filtros melhores contra deformações.
+      if (body.use_fast_free_provider) {
       try {
         const polPrompt =
           `Fotografia editorial cinematográfica, ultra realista, mostrando literalmente a cena: ${topic}. ` +
@@ -1433,6 +1434,7 @@ const staticPost = (url, body = {}) => {
         }
       } catch (e) {
         genError = genError || e?.message || String(e);
+      }
       }
 
       // 2) Função de imagem com qualidade superior. Ela própria evita gateway pago sem créditos e faz fallback seguro.
