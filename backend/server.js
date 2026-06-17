@@ -436,16 +436,6 @@ async function generateAiReply(jid, text) {
     ...history,
   ];
 
-  const directReply = await generateDirectOllamaReply(messages).catch((e) => {
-    state.lastAiError = e.message;
-    return null;
-  });
-  if (directReply) {
-    rememberMessage(jid, "assistant", directReply);
-    state.lastAiError = null;
-    return directReply;
-  }
-
   const emergentReply = await callEmergentChat({ messages }).catch((e) => {
     state.lastAiError = e.message;
     return null;
@@ -454,6 +444,16 @@ async function generateAiReply(jid, text) {
     rememberMessage(jid, "assistant", emergentReply);
     state.lastAiError = null;
     return emergentReply;
+  }
+
+  const directReply = await generateDirectOllamaReply(messages).catch((e) => {
+    state.lastAiError = e.message;
+    return null;
+  });
+  if (directReply) {
+    rememberMessage(jid, "assistant", directReply);
+    state.lastAiError = null;
+    return directReply;
   }
 
   const controller = new AbortController();
