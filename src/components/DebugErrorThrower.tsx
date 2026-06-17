@@ -26,8 +26,7 @@ export const DebugErrorThrower = () => {
   }, []);
 
   if (message) {
-    // Throw INTENCIONAL — aciona o overlay "Try to Fix" da Lovable.
-    throw new Error(message);
+    console.warn(message);
   }
 
   return null;
