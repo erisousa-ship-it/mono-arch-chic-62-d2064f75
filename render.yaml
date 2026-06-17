@@ -45,7 +45,7 @@ services:
       - key: OLLAMA_MODEL
         value: qwen2.5:3b-instruct
       - key: OLLAMA_BASE_URL
-        value: https://unabashed-vertical-crispness.ngrok-free.dev
+        sync: false
       - key: EMERGENT_BASE_URL
         value: https://api.emergent.sh/v1
       - key: EMERGENT_API_KEY
