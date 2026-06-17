@@ -15,9 +15,9 @@ const LS_TOKEN = "wa_conn_token";
 
 // Endpoints reais do backend Kenia (backend/server.js)
 const EP_STATUS = "/api/whatsapp/baileys/status";
-const EP_QR = "/api/whatsapp/qr";
+const EP_QR = "/api/whatsapp/baileys/qr";
 const EP_RESTART = "/api/whatsapp/baileys/restart";
-const EP_LOGOUT = "/api/whatsapp/logout";
+const EP_LOGOUT = "/api/whatsapp/baileys/logout";
 
 const DEFAULT_BASE = (import.meta.env.VITE_BACKEND_URL || "").replace(/\/api\/?$/, "");
 
@@ -100,6 +100,7 @@ export default function WhatsAppConnection() {
       const data = await callApi(EP_QR, "GET");
       const qrVal = await pickQrImage(data);
       if (qrVal) setQr(qrVal);
+      else setQr(null);
       return { qr: qrVal };
     } catch {
       return null;
@@ -131,8 +132,8 @@ export default function WhatsAppConnection() {
       await callApi(EP_RESTART, "POST");
       toast.success("Reinício solicitado — aguardando QR...");
       let got = null;
-      for (let i = 0; i < 5 && !got?.qr; i++) {
-        await new Promise((r) => setTimeout(r, 5000));
+      for (let i = 0; i < 15 && !got?.qr; i++) {
+        await new Promise((r) => setTimeout(r, 2000));
         got = await fetchQr();
       }
       if (!got?.qr) toast.warning("QR ainda não disponível. Verifique se o backend Baileys está rodando e tente novamente.");
@@ -159,11 +160,12 @@ export default function WhatsAppConnection() {
   };
 
 
-  // Polling QR a cada 20s enquanto desconectado
+  // Polling QR a cada 5s enquanto desconectado
   useEffect(() => {
     if (!baseUrl) return;
     if (status?.connected) return;
-    const t = setInterval(fetchQr, 20000);
+    fetchQr();
+    const t = setInterval(fetchQr, 5000);
     return () => clearInterval(t);
   }, [baseUrl, token, status?.connected, fetchQr]);
 
@@ -261,6 +263,15 @@ export default function WhatsAppConnection() {
           </div>
         ) : (
           <div className="space-y-3">
+            {status && !status.connected && (
+              <div className="text-xs text-nude-600 bg-nude-50 border border-nude-200 rounded-md p-3 space-y-1">
+                <div>Estado: <strong>{status.state || "—"}</strong></div>
+                <div>QR disponível no backend: <strong>{status.hasQr ? "sim" : "não"}</strong></div>
+                {status.secondsWaiting ? <div>Aguardando há {status.secondsWaiting}s</div> : null}
+                {status.last_error && <div className="text-red-700">Último erro: {status.last_error}</div>}
+                {status.error && <div className="text-red-700">Falha ao consultar backend: {status.error}</div>}
+              </div>
+            )}
             <Button onClick={generateQr} disabled={restarting || !baseUrl}>
               {restarting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Gerando...</> : <><QrCode className="w-4 h-4 mr-2" />Gerar Novo QR Code</>}
             </Button>
