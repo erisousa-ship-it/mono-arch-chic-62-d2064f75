@@ -263,6 +263,15 @@ export default function WhatsAppConnection() {
           </div>
         ) : (
           <div className="space-y-3">
+            {status && !status.connected && (
+              <div className="text-xs text-nude-600 bg-nude-50 border border-nude-200 rounded-md p-3 space-y-1">
+                <div>Estado: <strong>{status.state || "—"}</strong></div>
+                <div>QR disponível no backend: <strong>{status.hasQr ? "sim" : "não"}</strong></div>
+                {status.secondsWaiting ? <div>Aguardando há {status.secondsWaiting}s</div> : null}
+                {status.last_error && <div className="text-red-700">Último erro: {status.last_error}</div>}
+                {status.error && <div className="text-red-700">Falha ao consultar backend: {status.error}</div>}
+              </div>
+            )}
             <Button onClick={generateQr} disabled={restarting || !baseUrl}>
               {restarting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Gerando...</> : <><QrCode className="w-4 h-4 mr-2" />Gerar Novo QR Code</>}
             </Button>
