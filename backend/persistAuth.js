@@ -2,11 +2,23 @@ import { createClient } from "@supabase/supabase-js";
 import { readdir, readFile, writeFile, mkdir } from "fs/promises";
 import path from "path";
 
-const URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
 const TABLE = "whatsapp_auth";
 
-const client = (URL && KEY) ? createClient(URL, KEY, { auth: { persistSession: false } }) : null;
+const createPersistenceClient = () => {
+  if (!SUPABASE_URL || !KEY) return null;
+
+  try {
+    new globalThis.URL(SUPABASE_URL);
+    return createClient(SUPABASE_URL, KEY, { auth: { persistSession: false } });
+  } catch (e) {
+    console.warn("[persistAuth] disabled: Supabase env inválida:", e?.message || String(e));
+    return null;
+  }
+};
+
+const client = createPersistenceClient();
 
 export const persistEnabled = !!client;
 
