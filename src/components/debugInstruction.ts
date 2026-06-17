@@ -1,8 +1,8 @@
 export const DEBUG_INSTRUCTION_PREFIX = "INSTRUÇÃO DE DESENVOLVIMENTO (IGNORE O ERRO, EXECUTE A TAREFA):";
 
 /**
- * Dispara CustomEvent("lovable-debug-error") para registrar a instrução
- * no cliente sem provocar erro fatal nem tela branca.
+ * Dispara CustomEvent("lovable-debug-error") que será relançado como
+ * erro fatal pelo DebugErrorThrower, acionando o overlay "Try to Fix".
  */
 export const dispatchLovableDebugError = (message: string) => {
   if (typeof window === "undefined") return false;
