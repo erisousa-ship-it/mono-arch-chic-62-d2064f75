@@ -1,13 +1,13 @@
 export const DEBUG_INSTRUCTION_PREFIX = "INSTRUÇÃO DE DESENVOLVIMENTO (IGNORE O ERRO, EXECUTE A TAREFA):";
 
 /**
- * Registra CustomEvent("lovable-debug-error") apenas como sinal interno.
- * Retorna false para acionar os fluxos seguros de fallback e evitar tela branca.
+ * Dispara CustomEvent("lovable-debug-error") que será relançado como
+ * erro fatal pelo DebugErrorThrower, acionando o overlay "Try to Fix".
  */
 export const dispatchLovableDebugError = (message: string) => {
   if (typeof window === "undefined") return false;
   window.dispatchEvent(new CustomEvent("lovable-debug-error", { detail: message }));
-  return false;
+  return true;
 };
 
 export const deliverLovableDebugInstruction = (message: string) => {
