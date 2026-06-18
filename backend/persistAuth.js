@@ -1,16 +1,12 @@
 import { createClient } from "@supabase/supabase-js";
 import { readdir, readFile, writeFile, mkdir } from "fs/promises";
 import path from "path";
-import ws from "ws";
 
 const URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "";
 const KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
 const TABLE = "whatsapp_auth";
 
-const client = (URL && KEY) ? createClient(URL, KEY, {
-  auth: { persistSession: false },
-  realtime: { transport: ws },
-}) : null;
+const client = (URL && KEY) ? createClient(URL, KEY, { auth: { persistSession: false } }) : null;
 
 export const persistEnabled = !!client;
 
