@@ -1556,7 +1556,6 @@ const fallbackToStaticPostPaths = new Set([
 // "vazio" no ambiente publicado (Render) caso o backend ainda não tenha
 // populado leads/contatos/processos/etc.
 const fallbackToStaticGetPaths = new Set([
-  "/whatsapp/config",
   "/leads",
   "/whatsapp/contacts",
   "/processes",
